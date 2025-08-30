@@ -46,7 +46,14 @@ type Win32_PartitionWithLabel struct {
 
 type Win32_Disk struct {
 	Drive      Win32_DiskDrive
+	IsSSD      bool
 	Partitions []Win32_PartitionWithLabel
+}
+
+type MSFT_PhysicalDisk struct {
+	FriendlyName string
+	SerialNumber string
+	MediaType    uint16 // 3 = HDD, 4 = SSD
 }
 
 func List_Drives() []Win32_Disk {
@@ -55,8 +62,9 @@ func List_Drives() []Win32_Disk {
 	var partitions []Win32_DiskPartition
 	var mappings []Win32_LogicalDiskToPartition
 	var logicalDisks []Win32_LogicalDisk
+	var physicalDisks []MSFT_PhysicalDisk
 
-	if err := wmi.Query("SELECT DeviceID, Model, SerialNumber, Size, Index FROM Win32_DiskDrive", &drives); err != nil {
+	if err := wmi.Query("SELECT DeviceID, Model, SerialNumber, Size, Index FROM Win32_DiskDrive WHERE MediaType='Fixed hard disk media'", &drives); err != nil {
 		log.Fatal(err)
 	}
 	if err := wmi.Query("SELECT DeviceID, DiskIndex, Size, Name FROM Win32_DiskPartition WHERE Size >= 1073741824", &partitions); err != nil {
@@ -68,10 +76,22 @@ func List_Drives() []Win32_Disk {
 	if err := wmi.Query("SELECT DeviceID, VolumeName FROM Win32_LogicalDisk", &logicalDisks); err != nil {
 		log.Fatal(err)
 	}
+	if err := wmi.QueryNamespace("SELECT FriendlyName, SerialNumber, MediaType FROM MSFT_PhysicalDisk", &physicalDisks, "ROOT\\Microsoft\\Windows\\Storage"); err != nil {
+		log.Fatal(err)
+	}
 
 	for _, d := range drives {
+		isSSD := false
+		for _, pd := range physicalDisks {
+			if strings.EqualFold(strings.TrimSpace(pd.SerialNumber), strings.TrimSpace(d.SerialNumber)) {
+				isSSD = pd.MediaType == 4
+				break
+			}
+		}
+
 		drive := Win32_Disk{
 			Drive:      d,
+			IsSSD:      isSSD,
 			Partitions: []Win32_PartitionWithLabel{},
 		}
 		for _, p := range partitions {
