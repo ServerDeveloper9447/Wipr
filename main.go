@@ -1,14 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
+
+type Config struct {
+	EnterpriseMode bool `json:"entMode"`
+}
 
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
 	if cond {
@@ -18,27 +20,50 @@ func ternary[T any](cond bool, iftrue T, iffalse T) T {
 }
 
 func main() {
-	myApp := app.New()
-	myWindow := myApp.NewWindow("Choice Widgets")
-	myWindow.Resize(fyne.NewSize(400, 400))
-	myWindow.SetTitle("Wipr")
-	options := []string{}
-	driveMap := make(map[string]Win32_Disk)
-	for _, v := range List_Drives() {
-		for _, p := range v.Partitions {
-			tag := fmt.Sprintf("%s %s (%d GB) %s", p.Letter, ternary(p.Label == "", "Local Disk", p.Label), p.Size/1024/1024/1024, ternary(p.Letter == "C:", "(System Drive)", ""))
-			options = append(options, tag)
-			driveMap[tag] = v
-		}
-	}
-	var str string
-	combo := widget.NewSelect(options, func(s string) {
-		str = s
+	wipr := app.New()
+	window := wipr.NewWindow("Wipr")
+	window.Resize(fyne.NewSize(800, 400))
+	window.SetTitle("Wipr")
+	window.SetFixedSize(true)
+	window.SetMaster()
+	window.SetCloseIntercept(func() {
+		cWindow := wipr.NewWindow("Confirm quit")
+		cWindow.SetTitle("Quit?")
+		cWindow.SetFixedSize(true)
+		box := container.NewVBox(
+			widget.NewLabel("Are you sure you want to quit?"),
+			container.NewGridWithColumns(2, widget.NewButton("Yes", func() {
+				window.Close()
+			}), widget.NewButton("Cancel", func() {
+				cWindow.Close()
+			})),
+		)
+		cWindow.SetContent(box)
+		cWindow.Show()
+		cWindow.RequestFocus()
+		cWindow.CenterOnScreen()
 	})
-	combo.SetSelected(options[0])
-	btn := widget.NewButton("Start", func() {
-		log.Println(str)
+	toolbar := widget.NewToolbar(
+		widget.NewToolbarSpacer(),
+		widget.NewToolbarAction(theme.SettingsIcon(), func() {}),
+		widget.NewToolbarAction(theme.HelpIcon(), func() {}),
+	)
+	drives := List_Drives()
+	partitions := List_Partitions()
+	selectOptions := widget.NewSelect(drives, func(s string) {})
+	typeOptions := widget.NewSelect([]string{"By Disk Drive", "By Partitions"}, func(s string) {
+		selectOptions.ClearSelected()
+		selectOptions.SetOptions(ternary(s == "By Disk Drive", drives, partitions))
 	})
-	myWindow.SetContent(container.NewVBox(combo, btn))
-	myWindow.ShowAndRun()
+	typeOptions.SetSelectedIndex(0)
+	selectOptions.SetSelectedIndex(0)
+	box := container.NewVBox(
+		widget.NewLabelWithStyle("Wipr", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Monospace: true}),
+		typeOptions,
+		selectOptions,
+	)
+	content := container.NewBorder(toolbar, nil, nil, nil, box)
+	window.CenterOnScreen()
+	window.SetContent(content)
+	window.ShowAndRun()
 }
