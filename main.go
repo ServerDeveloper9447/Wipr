@@ -113,7 +113,7 @@ func main() {
 			modal.Show()
 		}),
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
-			url, _ := url.Parse("https://github.com/US-BEE-SIH/Wipr")
+			url, _ := url.Parse("https://wipr.vercel.app")
 			wipr.OpenURL(url)
 		}),
 	)
