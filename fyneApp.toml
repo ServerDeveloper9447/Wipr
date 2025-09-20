@@ -2,5 +2,5 @@
   Icon = "Small_Icon.png"
   Name = "Wipr"
   ID = "com.usbee.wipr"
-  Version = "1.0.0"
-  Build = 3
+  Version = "0.0.1"
+  Build = 4
