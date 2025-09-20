@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"net/url"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -111,7 +112,14 @@ func main() {
 			modal.Resize(fyne.NewSize(400, 300))
 			modal.Show()
 		}),
-		widget.NewToolbarAction(theme.HelpIcon(), func() {}),
+		widget.NewToolbarAction(theme.HelpIcon(), func() {
+			url, _ := url.Parse("https://github.com/US-BEE-SIH/Wipr")
+			wipr.OpenURL(url)
+		}),
+	)
+	btmToolbar := container.NewHBox(
+		layout.NewSpacer(),
+		widget.NewLabel("v" + wipr.Metadata().Version),
 	)
 	drives := List_Drives()
 	partitions := List_Partitions()
@@ -157,7 +165,7 @@ func main() {
 	)
 
 	boxWithBg := container.NewStack(bg, box)
-	content := container.NewBorder(toolbar, nil, nil, nil, boxWithBg)
+	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
 	m := fyne.NewMenu("Wipr",
 		fyne.NewMenuItem("Quit", func() {
 			window.Close()
