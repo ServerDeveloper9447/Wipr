@@ -17,9 +17,10 @@ import (
 )
 
 type Config struct {
-	EnterpriseMode bool   `json:"entMode"`
-	HostUrl        string `json:"hosturl"`
-	PassKey        string `json:"passkey"`
+	MinimizeOnClose bool   `json:"minimizeOnClose"`
+	EnterpriseMode  bool   `json:"entMode"`
+	HostUrl         string `json:"hosturl"`
+	PassKey         string `json:"passkey"`
 }
 
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
@@ -29,14 +30,26 @@ func ternary[T any](cond bool, iftrue T, iffalse T) T {
 	return iffalse
 }
 
+const (
+	WIDTH  = 700
+	HEIGHT = 400
+)
+
 func main() {
 	var config Config
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
-	window.Resize(fyne.NewSize(700, 400))
+	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
 	window.SetTitle("Wipr")
 	window.SetMaster()
+	var modalHidden *bool
+	t := true
+	modalHidden = &t
 	window.SetCloseIntercept(func() {
+		if config.MinimizeOnClose {
+			window.Hide()
+			return
+		}
 		var modal *widget.PopUp
 		box := container.New(NewCustomPaddedBoxLayout(15, 15), container.NewPadded(container.NewVBox(
 			widget.NewLabel("Are you sure you want to quit?"),
@@ -44,10 +57,14 @@ func main() {
 				window.Close()
 			}), widget.NewButton("Cancel", func() {
 				modal.Hide()
+				*modalHidden = true
 			})))),
 		)
 		modal = widget.NewModalPopUp(box, window.Canvas())
-		modal.Show()
+		if *modalHidden {
+			modal.Show()
+			*modalHidden = false
+		}
 	})
 	verifyBtn := widget.NewButtonWithIcon("Verify", theme.CheckButtonIcon(), func() {
 		fmt.Println("Verifying methods...")
@@ -66,14 +83,12 @@ func main() {
 				s = strings.ReplaceAll(s, " ", "")
 				hostUrl.SetText(s)
 			}
-			hostUrl.Disable()
 			key := widget.NewEntry()
 			key.Password = true
 			key.OnChanged = func(s string) {
 				s = strings.ReplaceAll(s, " ", "")
 				key.SetText(s)
 			}
-			key.Disable()
 			btn := widget.NewButtonWithIcon("Connect", theme.CheckButtonCheckedIcon(), func() {
 				config.EnterpriseMode = true
 				config.HostUrl = hostUrl.Text
@@ -82,18 +97,38 @@ func main() {
 				modal.Hide()
 			})
 			btn.Importance = widget.HighImportance
+			if config.EnterpriseMode {
+				hostUrl.Enable()
+				key.Enable()
+				btn.Enable()
+			} else {
+				hostUrl.Disable()
+				key.Disable()
+				btn.Disable()
+			}
+			checkB := widget.NewCheck("Enterprise Mode", func(b bool) {
+				if b {
+					hostUrl.Enable()
+					key.Enable()
+					btn.Enable()
+					verifyBtn.Show()
+				} else {
+					hostUrl.Disable()
+					key.Disable()
+					btn.Disable()
+					verifyBtn.Hide()
+				}
+			})
+			checkB.Checked = config.EnterpriseMode
+			mOC := widget.NewCheck("Minimize on close", func(b bool) {
+				config.MinimizeOnClose = b
+			})
+			mOC.Checked = config.MinimizeOnClose
 			box := container.New(NewCustomPaddedBoxLayout(5, 5),
 				container.NewPadded(
 					container.NewVBox(
-						widget.NewCheck("Enterprise Mode", func(b bool) {
-							if b {
-								hostUrl.Enable()
-								key.Enable()
-							} else {
-								hostUrl.Disable()
-								key.Disable()
-							}
-						}),
+						mOC,
+						checkB,
 						widget.NewLabel("Host URL"),
 						hostUrl,
 						widget.NewLabel("Connection Key"),
@@ -109,7 +144,7 @@ func main() {
 				),
 			)
 			modal = widget.NewModalPopUp(box, window.Canvas())
-			modal.Resize(fyne.NewSize(400, 300))
+			modal.Resize(fyne.NewSize(WIDTH-300, HEIGHT-100))
 			modal.Show()
 		}),
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
@@ -117,15 +152,29 @@ func main() {
 			wipr.OpenURL(url)
 		}),
 	)
-	btmToolbar := container.NewHBox(
-		layout.NewSpacer(),
-		widget.NewLabel("v" + wipr.Metadata().Version),
-	)
+	warningLabel := widget.NewLabel("Data deleted by Wipr is unrecoverable. Data destruction due to user error is not the responsibility of the developers.")
+	warningLabel.Wrapping = fyne.TextWrapWord
+	warningLabel.TextStyle = fyne.TextStyle{Bold: true, Underline: true}
+	warningLabel.Alignment = fyne.TextAlignCenter
+	btmToolbar := container.NewVBox(
+		warningLabel,
+		container.NewHBox(
+			layout.NewSpacer(),
+			widget.NewLabel("v"+wipr.Metadata().Version),
+		))
 	drives := List_Drives()
 	partitions := List_Partitions()
-	selectOptions := widget.NewSelect(drives, func(s string) {})
+	var wipeBtn *widget.Button
+	selectOptions := widget.NewSelect(drives, func(s string) {
+		if wipeBtn != nil {
+			wipeBtn.Enable()
+		}
+	})
 	typeOptions := widget.NewSelect([]string{"By Disk Drive", "By Partitions"}, func(s string) {
 		selectOptions.ClearSelected()
+		if wipeBtn != nil {
+			wipeBtn.Disable()
+		}
 		selectOptions.SetOptions(ternary(s == "By Disk Drive", drives, partitions))
 	})
 	typeOptions.SetSelectedIndex(0)
@@ -138,35 +187,36 @@ func main() {
 	spacer := canvas.NewRectangle(color.Transparent)
 	spacer.SetMinSize(fyne.NewSize(0, 30))
 
-	warningLabel := widget.NewLabel("Data deleted by Wipr is unrecoverable. Data destruction due to user error is not the responsibility of the developers.")
-	warningLabel.Wrapping = fyne.TextWrapWord
-	warningLabel.TextStyle = fyne.TextStyle{Bold: true, Underline: true}
-	warningLabel.Alignment = fyne.TextAlignCenter
-
 	bg := canvas.NewRectangle(color.Transparent)
-	bg.SetMinSize(fyne.NewSize(600, 400))
-	wipeBtn := widget.NewButtonWithIcon("Wipe", theme.DeleteIcon(), func() {
+	bg.SetMinSize(fyne.NewSize(WIDTH-100, HEIGHT))
+	var box *fyne.Container
+	wipeBtn = widget.NewButtonWithIcon("Wipe", theme.DeleteIcon(), func() {
 		fmt.Println("Wiping methods...")
+		ok, err := Wipr(wipr, &window, box, Data{Mode: typeOptions.Selected, Path: selectOptions.Selected})
+		if !ok {
+			fmt.Println(err)
+		}
 	})
+	box = container.NewVBox(wiprText,
+		spacer,
+		typeOptions,
+		selectOptions,
+		layout.NewSpacer(),
+		wipeBtn,
+		verifyBtn,
+	)
 	wipeBtn.Importance = widget.DangerImportance
-
-	box := container.New(
+	ctn := container.New(
 		NewCustomPaddedBoxLayout(15, 0),
-		container.NewPadded(container.NewVBox(wiprText,
-			spacer,
-			typeOptions,
-			selectOptions,
-			layout.NewSpacer(),
-			wipeBtn,
-			verifyBtn,
-			warningLabel,
-		),
-		),
+		container.NewPadded(box),
 	)
 
-	boxWithBg := container.NewStack(bg, box)
+	boxWithBg := container.NewStack(bg, ctn)
 	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
 	m := fyne.NewMenu("Wipr",
+		fyne.NewMenuItem("Show", func() {
+			window.Show()
+		}),
 		fyne.NewMenuItem("Quit", func() {
 			window.Close()
 		}))
