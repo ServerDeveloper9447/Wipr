@@ -1,26 +1,31 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"fyne.io/systray"
+	"github.com/danieljoos/wincred"
 )
 
 type Config struct {
-	MinimizeOnClose bool   `json:"minimizeOnClose"`
-	EnterpriseMode  bool   `json:"entMode"`
-	HostUrl         string `json:"hosturl"`
-	PassKey         string `json:"passkey"`
+	MinimizeOnClose bool
+	EnterpriseMode  bool
+	HostUrl         string
+	PassKey         string
 }
 
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
@@ -35,8 +40,67 @@ const (
 	HEIGHT = 400
 )
 
+var (
+	isWiping = false
+	config   Config
+)
+
+func shortenPath(path string) (string, error) {
+	cleanPath := filepath.ToSlash(path)
+
+	dir, file := filepath.Split(cleanPath)
+
+	if file == "" {
+		return "", fmt.Errorf("invalid path: no file name found")
+	}
+
+	dirParts := strings.Split(strings.TrimSuffix(dir, "/"), "/")
+
+	var shortDir []string
+	if len(dirParts) > 3 {
+		shortDir = append(shortDir, dirParts[0], "...")
+
+		for i := len(dirParts) - 2; i < len(dirParts); i++ {
+			folderName := dirParts[i]
+			if len(folderName) > 10 {
+				shortDir = append(shortDir, folderName[:5]+"[...]"+folderName[len(folderName)-5:])
+			} else {
+				shortDir = append(shortDir, folderName)
+			}
+		}
+	} else {
+		shortDir = dirParts
+	}
+
+	shortenedDir := strings.Join(shortDir, "/") + "/"
+
+	ext := filepath.Ext(file)
+	name := strings.TrimSuffix(file, ext)
+	var shortFile string
+	if len(name) > 10 {
+		shortFile = name[:5] + "[...]" + name[len(name)-5:] + ext
+	} else {
+		shortFile = file
+	}
+
+	return shortenedDir + shortFile, nil
+}
+
+func init() {
+	hosturl, err := wincred.GetGenericCredential("Wipr/ServerHost")
+	if err != nil {
+		return
+	}
+	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
+	if err != nil {
+		return
+	}
+	config.HostUrl = string(hosturl.CredentialBlob)
+	config.PassKey = string(key.CredentialBlob)
+	config.EnterpriseMode = true
+}
+
 func main() {
-	var config Config
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
 	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
@@ -54,7 +118,7 @@ func main() {
 		box := container.New(NewCustomPaddedBoxLayout(15, 15), container.NewPadded(container.NewVBox(
 			widget.NewLabel("Are you sure you want to quit?"),
 			container.NewGridWithColumns(2, widget.NewButton("Yes", func() {
-				window.Close()
+				wipr.Quit()
 			}), widget.NewButton("Cancel", func() {
 				modal.Hide()
 				*modalHidden = true
@@ -66,7 +130,7 @@ func main() {
 			*modalHidden = false
 		}
 	})
-	verifyBtn := widget.NewButtonWithIcon("Verify", theme.CheckButtonIcon(), func() {
+	verifyBtn := widget.NewButtonWithIcon("Verify", theme.CheckButtonCheckedIcon(), func() {
 		fmt.Println("Verifying methods...")
 	})
 	if !config.EnterpriseMode {
@@ -89,10 +153,36 @@ func main() {
 				s = strings.ReplaceAll(s, " ", "")
 				key.SetText(s)
 			}
+			if config.EnterpriseMode {
+				hostUrl.Text = config.HostUrl
+				key.Text = config.PassKey
+			}
+
 			btn := widget.NewButtonWithIcon("Connect", theme.CheckButtonCheckedIcon(), func() {
 				config.EnterpriseMode = true
-				config.HostUrl = hostUrl.Text
+				if hostUrl.Text == "" || key.Text == "" {
+					dialog.ShowError(errors.New("please enter host url and key"), window)
+					return
+				}
+				hosturl, err := url.ParseRequestURI(hostUrl.Text)
+				if err != nil {
+					dialog.ShowError(err, window)
+					return
+				}
+				if len(key.Text) != 16 {
+					dialog.ShowError(errors.New("key must be of length 16"), window)
+					return
+				}
+				config.HostUrl = hosturl.String()
 				config.PassKey = key.Text
+				hostcred := wincred.NewGenericCredential("Wipr/ServerHost")
+				hostcred.CredentialBlob = []byte(config.HostUrl)
+				hostcred.Persist = wincred.PersistLocalMachine
+				keycred := wincred.NewGenericCredential("Wipr/ServerKey")
+				keycred.CredentialBlob = []byte(config.PassKey)
+				keycred.Persist = wincred.PersistLocalMachine
+				hostcred.Write()
+				keycred.Write()
 				verifyBtn.Show()
 				modal.Hide()
 			})
@@ -111,12 +201,16 @@ func main() {
 					hostUrl.Enable()
 					key.Enable()
 					btn.Enable()
-					verifyBtn.Show()
 				} else {
 					hostUrl.Disable()
 					key.Disable()
 					btn.Disable()
 					verifyBtn.Hide()
+					config.EnterpriseMode = false
+					hostcred, _ := wincred.GetGenericCredential("Wipr/ServerHost")
+					hostcred.Delete()
+					keycred, _ := wincred.GetGenericCredential("Wipr/ServerKey")
+					keycred.Delete()
 				}
 			})
 			checkB.Checked = config.EnterpriseMode
@@ -191,9 +285,10 @@ func main() {
 	bg.SetMinSize(fyne.NewSize(WIDTH-100, HEIGHT))
 	var box *fyne.Container
 	wipeBtn = widget.NewButtonWithIcon("Wipe", theme.DeleteIcon(), func() {
-		fmt.Println("Wiping methods...")
+		isWiping = true
 		ok, err := Wipr(wipr, &window, box, Data{Mode: typeOptions.Selected, Path: selectOptions.Selected})
 		if !ok {
+			dialog.ShowError(err, window)
 			fmt.Println(err)
 		}
 	})
@@ -202,8 +297,8 @@ func main() {
 		typeOptions,
 		selectOptions,
 		layout.NewSpacer(),
-		wipeBtn,
 		verifyBtn,
+		wipeBtn,
 	)
 	wipeBtn.Importance = widget.DangerImportance
 	ctn := container.New(
@@ -215,13 +310,18 @@ func main() {
 	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
 	m := fyne.NewMenu("Wipr",
 		fyne.NewMenuItem("Show", func() {
-			window.Show()
+			if !isWiping {
+				window.Show()
+			}
 		}),
 		fyne.NewMenuItem("Quit", func() {
-			window.Close()
+			wipr.Quit()
 		}))
 	if desk, ok := wipr.(desktop.App); ok {
 		desk.SetSystemTrayMenu(m)
+		wipr.Lifecycle().SetOnStarted(func() {
+			systray.SetTooltip("Wipr v" + wipr.Metadata().Version)
+		})
 	}
 
 	window.CenterOnScreen()
