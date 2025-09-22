@@ -25,6 +25,9 @@ jobs:
         with:
           go-version: '1.24'
 
+      - name: Install fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+
       - name: Build
         run: fyne p
 
