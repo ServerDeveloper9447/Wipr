@@ -87,17 +87,7 @@ func shortenPath(path string) (string, error) {
 }
 
 func init() {
-	hosturl, err := wincred.GetGenericCredential("Wipr/ServerHost")
-	if err != nil {
-		return
-	}
-	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
-	if err != nil {
-		return
-	}
-	config.HostUrl = string(hosturl.CredentialBlob)
-	config.PassKey = string(key.CredentialBlob)
-	config.EnterpriseMode = true
+	setup_creds()
 }
 
 func main() {
@@ -208,9 +198,13 @@ func main() {
 					verifyBtn.Hide()
 					config.EnterpriseMode = false
 					hostcred, _ := wincred.GetGenericCredential("Wipr/ServerHost")
-					hostcred.Delete()
+					if hostcred != nil {
+						hostcred.Delete()
+					}
 					keycred, _ := wincred.GetGenericCredential("Wipr/ServerKey")
-					keycred.Delete()
+					if keycred !=  nil {
+						keycred.Delete()
+					}
 				}
 			})
 			checkB.Checked = config.EnterpriseMode

@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"github.com/danieljoos/wincred"
 	"github.com/jaypipes/ghw"
 	"golang.org/x/sys/windows"
 )
@@ -61,6 +62,20 @@ func formatBytes(b uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func setup_creds() {
+	hosturl, err := wincred.GetGenericCredential("Wipr/ServerHost")
+	if err != nil {
+		return
+	}
+	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
+	if err != nil {
+		return
+	}
+	config.HostUrl = string(hosturl.CredentialBlob)
+	config.PassKey = string(key.CredentialBlob)
+	config.EnterpriseMode = true
 }
 
 func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partition) (success bool, err error) {
@@ -187,6 +202,7 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 				prg.SetValue(1.0)
 				sizeLabel.SetText(fmt.Sprintf("%s / %s", formatBytes(totalPartitionSize), formatBytes(totalPartitionSize)))
 				dialog.ShowInformation("Success", "Wipe complete!", *window)
+				app.SendNotification(fyne.NewNotification("Success", "Wipe Complete"))
 			}
 		})
 	}()
