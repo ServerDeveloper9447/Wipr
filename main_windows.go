@@ -30,15 +30,10 @@ type Data struct {
 }
 
 func setup_creds() {
-	hosturl, err := wincred.GetGenericCredential("Wipr/ServerHost")
-	if err != nil {
-		return
-	}
 	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
 	if err != nil {
 		return
 	}
-	config.HostUrl = string(hosturl.CredentialBlob)
 	config.PassKey = string(key.CredentialBlob)
 	config.EnterpriseMode = true
 }

@@ -26,7 +26,6 @@ import (
 type Config struct {
 	MinimizeOnClose bool
 	EnterpriseMode  bool
-	HostUrl         string
 	PassKey         string
 }
 
@@ -176,12 +175,6 @@ func main() {
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
 			var modal *widget.PopUp
 
-			hostUrl := widget.NewEntry()
-			hostUrl.PlaceHolder = "http://127.0.0.1:56009"
-			hostUrl.OnChanged = func(s string) {
-				s = strings.ReplaceAll(s, " ", "")
-				hostUrl.SetText(s)
-			}
 			key := widget.NewEntry()
 			key.Password = true
 			key.OnChanged = func(s string) {
@@ -189,63 +182,44 @@ func main() {
 				key.SetText(s)
 			}
 			if config.EnterpriseMode {
-				hostUrl.Text = config.HostUrl
 				key.Text = config.PassKey
 			}
 
 			btn := widget.NewButtonWithIcon("Connect", theme.CheckButtonCheckedIcon(), func() {
 				config.EnterpriseMode = true
-				if hostUrl.Text == "" || key.Text == "" {
-					dialog.ShowError(errors.New("please enter host url and key"), window)
-					return
-				}
-				hosturl, err := url.ParseRequestURI(hostUrl.Text)
-				if err != nil {
-					dialog.ShowError(err, window)
+				if key.Text == "" {
+					dialog.ShowError(errors.New("please enter key"), window)
 					return
 				}
 				if len(key.Text) != 16 {
 					dialog.ShowError(errors.New("key must be of length 16"), window)
 					return
 				}
-				config.HostUrl = hosturl.String()
 				config.PassKey = key.Text
-				hostcred := wincred.NewGenericCredential("Wipr/ServerHost")
-				hostcred.CredentialBlob = []byte(config.HostUrl)
-				hostcred.Persist = wincred.PersistLocalMachine
 				keycred := wincred.NewGenericCredential("Wipr/ServerKey")
 				keycred.CredentialBlob = []byte(config.PassKey)
 				keycred.Persist = wincred.PersistLocalMachine
-				hostcred.Write()
 				keycred.Write()
 				verifyBtn.Show()
 				modal.Hide()
 			})
 			btn.Importance = widget.HighImportance
 			if config.EnterpriseMode {
-				hostUrl.Enable()
 				key.Enable()
 				btn.Enable()
 			} else {
-				hostUrl.Disable()
 				key.Disable()
 				btn.Disable()
 			}
 			checkB := widget.NewCheck("Enterprise Mode", func(b bool) {
 				if b {
-					hostUrl.Enable()
 					key.Enable()
 					btn.Enable()
 				} else {
-					hostUrl.Disable()
 					key.Disable()
 					btn.Disable()
 					verifyBtn.Hide()
 					config.EnterpriseMode = false
-					hostcred, _ := wincred.GetGenericCredential("Wipr/ServerHost")
-					if hostcred != nil {
-						hostcred.Delete()
-					}
 					keycred, _ := wincred.GetGenericCredential("Wipr/ServerKey")
 					if keycred != nil {
 						keycred.Delete()
@@ -262,8 +236,6 @@ func main() {
 					container.NewVBox(
 						mOC,
 						checkB,
-						widget.NewLabel("Host URL"),
-						hostUrl,
 						widget.NewLabel("Connection Key"),
 						key,
 						layout.NewSpacer(),
