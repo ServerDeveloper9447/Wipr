@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -19,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"fyne.io/systray"
 	"github.com/danieljoos/wincred"
+	"github.com/jaypipes/ghw"
 )
 
 type Config struct {
@@ -44,6 +46,41 @@ var (
 	isWiping = false
 	config   Config
 )
+
+func List_Drives() []string {
+	block, _ := ghw.Block()
+	drives := []string{}
+	for _, d := range block.Disks {
+		driveMap[d.Model] = d
+		drives = append(drives, d.Model)
+	}
+	return drives
+}
+
+func List_Partitions() []string {
+	block, _ := ghw.Block()
+	paritions := []string{}
+	for _, d := range block.Disks {
+		for _, p := range d.Partitions {
+			paritions = append(paritions, fmt.Sprintf("%s %s", p.Name, d.Model))
+			partitionMap[fmt.Sprintf("%s %s", p.Name, d.Model)] = p
+		}
+	}
+	return paritions
+}
+
+func formatBytes(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
 
 func shortenPath(path string) (string, error) {
 	cleanPath := filepath.ToSlash(path)
@@ -87,6 +124,14 @@ func shortenPath(path string) (string, error) {
 }
 
 func init() {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		fmt.Println("Unsupported OS")
+		return
+	}
+	if runtime.GOOS == "linux" {
+		Wipr_Cli()
+		return
+	}
 	setup_creds()
 }
 
@@ -202,7 +247,7 @@ func main() {
 						hostcred.Delete()
 					}
 					keycred, _ := wincred.GetGenericCredential("Wipr/ServerKey")
-					if keycred !=  nil {
+					if keycred != nil {
 						keycred.Delete()
 					}
 				}
