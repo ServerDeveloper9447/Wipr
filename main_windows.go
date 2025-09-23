@@ -103,7 +103,7 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 		}
 
 		fyne.DoAndWait(func() {
-			sizeLabel.SetText(fmt.Sprintf("%s / %s", formatBytes(totalUsedBytes), formatBytes(totalPartitionSize)))
+			sizeLabel.SetText(fmt.Sprintf("0 / %s", formatBytes(totalUsedBytes)))
 		})
 
 		var walkErr error
@@ -143,6 +143,7 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 						}
 						path, _ = shortenPath(path)
 						textArea.SetText(path)
+						sizeLabel.SetText(fmt.Sprintf("%s / %s", formatBytes(accumulatedSize), formatBytes(totalUsedBytes)))
 					})
 				}
 				return nil
