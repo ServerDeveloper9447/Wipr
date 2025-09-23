@@ -6,7 +6,7 @@ Wipr is a desktop application for securely wiping data from drives and partition
 
 ## Features
 
-*   **Cross-Platform:** Runs on Windows, macOS, and Linux.
+*   **Cross-Platform:** Runs on Windows and Linux.
 *   **Drive & Partition Selection:** Easily select a target drive or partition from a dropdown list.
 *   **Secure Deletion:** Implements secure data wiping methods. (Not implemented until this commit)
 *   **System Tray Integration:** Runs in the background with a system tray icon for quick access.
@@ -17,31 +17,37 @@ Wipr is a desktop application for securely wiping data from drives and partition
 ### Prerequisites
 
 *   Go 1.24 or later
-*   A C compiler (like GCC) for Fyne dependencies
+*   Mingw-w64
+*   Platform specific dependencies for Fyne can be found [here](https://docs.fyne.io/started)
 
 ### Building from Source
 
 1.  Clone the repository:
     ```sh
-    git clone https://github.com/your-username/wipr.git
+    git clone https://github.com/US-BEE-SIH/Wipr.git
     cd wipr
     ```
 2.  Install dependencies:
     ```sh
     go mod tidy
     ```
-3.  Build the application:
+3.  Install Fyne CLI
+    ```sh
+    go install fyne.io/tools/cmd/fyne@latest
+    ```
+4.  Build the application:
     ```sh
     fyne package
     ```
-4.  Run the executable:
-    *   Windows: `wipr.exe`
-    *   macOS/Linux: `./wipr`
+5.  Run the executable:
+    *   Windows: `Wipr.exe`
+    *   Linux: `./Wipr`
 
 ## Dependencies
 
-*   [fyne.io/fyne/v2](https://github.com/fyne-io/fyne): The GUI toolkit used for the user interface.
-*   [github.com/jaypipes/ghw](https://github.com/jaypipes/ghw): A hardware inspection and discovery library, used to list drives and partitions.
+*   [Fyne.io](https://github.com/fyne-io/fyne): The GUI toolkit used for the user interface.
+*   [jaypipes/ghw](https://github.com/jaypipes/ghw): A hardware inspection and discovery library, used to list drives and partitions.
+*   [danieljoos/wincred](https://github.com/danieljoos/wincred): For managing verification token via Windows Credentials Manager
 
 ## Warning
 
