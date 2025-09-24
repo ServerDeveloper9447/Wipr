@@ -34,7 +34,7 @@ jobs:
         run: go install github.com/fyne-io/fyne-cross@latest
 
       - name: Build for Windows
-        run: fyne-cross windows -name Wipr_win-amd64_${{github.ref_name}}.exe -tags windows
+        run: fyne-cross windows -name Wipr_win-amd64_${{github.ref_name}} -tags windows
 
       - name: Build for Linux
         run: fyne-cross linux -name Wipr_linux-amd64_${{github.ref_name}} -tags linux
@@ -44,7 +44,7 @@ jobs:
         with:
           name: Wipr ${{github.ref_name}}
           files: |
-            fyne-cross\bin\windows-amd64\Wipr_win-amd64_${{github.ref_name}}.exe
-            fyne-cross\bin\linux-amd64\Wipr_linux-amd64_${{github.ref_name}}
+            fyne-cross\dist\windows-amd64\Wipr_win-amd64_${{github.ref_name}}.zip
+            fyne-cross\dist\linux-amd64\Wipr_linux-amd64_${{github.ref_name}}.tar.xz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
