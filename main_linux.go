@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/jaypipes/ghw"
+	"r00t2.io/gosecret"
 )
 
 type Data struct {
@@ -16,7 +17,26 @@ type Data struct {
 	Path string
 }
 
-func setup_creds() {}
+var (
+	secretAttr = map[string]string{
+		"appname": "com.usbee.wipr",
+	}
+)
+
+func setup_creds() {
+	service, err := gosecret.NewService()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	unlocked, _, err := service.SearchItems(secretAttr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	item := unlocked[0]
+	config.PassKey = string(item.Secret.Value)
+}
 
 func ElevateOnLaunch() {
 	if os.Geteuid() != 0 {

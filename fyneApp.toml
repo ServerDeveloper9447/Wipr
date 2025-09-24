@@ -3,4 +3,10 @@
   Name = "Wipr"
   ID = "com.usbee.wipr"
   Version = "0.0.1"
-  Build = 5
+  Build = 10
+
+[LinuxAndBSD]
+  GenericName = "Wipr"
+  Categories = ["Utilities"]
+  Comment = "Wipe partitions and drives"
+  Keywords = ["wipe", "shred"]
