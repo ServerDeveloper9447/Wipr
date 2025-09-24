@@ -8,35 +8,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build_windows:
     permissions:
       contents: write
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
+      - name: Login to Docker
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
       - uses: actions/checkout@v4
 
-      - name: Install MinGW-w64
-        run: choco install mingw -y
+      - name: Update packages
+        run: sudo apt update -y
 
-      - name: Set PATH for MinGW
-        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
-
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
+      - name: Install fyne-cross
+        run: go install github.com/fyne-io/fyne-cross@latest
 
-      - name: Build
-        run: fyne p
+      - name: Build for Windows
+        run: fyne-cross windows -name Wipr_win-amd64_${{github.ref_name}}.exe -tags windows
+
+      - name: Build for Linux
+        run: fyne-cross linux -name Wipr_linux-amd64_${{github.ref_name}} -tags linux
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           name: Wipr ${{github.ref_name}}
-          files: Wipr.exe
+          files: |
+            fyne-cross\bin\windows-amd64\Wipr_win-amd64_${{github.ref_name}}.exe
+            fyne-cross\bin\linux-amd64\Wipr_linux-amd64_${{github.ref_name}}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
