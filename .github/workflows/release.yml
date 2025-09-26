@@ -33,18 +33,21 @@ jobs:
       - name: Install fyne-cross
         run: go install github.com/fyne-io/fyne-cross@latest
 
+      - name: Generate bundle file
+        run: go generate
+
       - name: Build for Windows
-        run: fyne-cross windows -name Wipr_win-amd64_${{github.ref_name}} -tags windows
+        run: fyne-cross windows -name Wipr_win-amd64 -tags windows
 
       - name: Build for Linux
-        run: fyne-cross linux -name Wipr_linux-amd64_${{github.ref_name}} -tags linux
+        run: fyne-cross linux -name Wipr_linux-amd64 -tags linux
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           name: Wipr ${{github.ref_name}}
           files: |
-            fyne-cross\dist\windows-amd64\Wipr_win-amd64_${{github.ref_name}}.zip
-            fyne-cross\dist\linux-amd64\Wipr_linux-amd64_${{github.ref_name}}.tar.xz
+            fyne-cross\dist\windows-amd64\Wipr_win-amd64.zip
+            fyne-cross\dist\linux-amd64\Wipr_linux-amd64.tar.xz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
