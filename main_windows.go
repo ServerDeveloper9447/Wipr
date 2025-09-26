@@ -18,7 +18,6 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -242,10 +241,10 @@ func ElevateOnLaunch() bool {
 }
 
 func Wipr() {
-	isElevated := ElevateOnLaunch()
-	if !isElevated {
-		return
-	}
+	// isElevated := ElevateOnLaunch()
+	// if !isElevated {
+	// 	return
+	// }
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
 	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
@@ -364,8 +363,48 @@ func Wipr() {
 			modal.Show()
 		}),
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
+			infoWindow := wipr.NewWindow("Wipr Info")
+			infoWindow.Resize(fyne.NewSize(400, 300))
+			infoWindow.SetFixedSize(true)
+			logo := canvas.NewImageFromFile("Small_Icon.png")
+			logo.FillMode = canvas.ImageFillStretch
+			logo.SetMinSize(fyne.NewSquareSize(100))
+			logo.Resize(fyne.NewSquareSize(100))
+			infoTxt := widget.NewLabelWithStyle("Wipr is a data destruction tool made by US-BEE. \nData destroyed by this software due to user's fault is not the developers' responsibility.", fyne.TextAlignCenter, fyne.TextStyle{
+				Italic: true,
+			})
+			infoTxt.Wrapping = fyne.TextWrapWord
 			url, _ := url.Parse("https://wipr.vercel.app")
-			wipr.OpenURL(url)
+			box := container.New(
+				NewCustomPaddedBoxLayout(15, 15),
+				container.NewVBox(
+					container.NewCenter(logo),
+					widget.NewLabelWithStyle("Wipr", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Monospace: true}),
+					infoTxt,
+					layout.NewSpacer(),
+					container.NewCenter(container.NewHBox(
+						widget.NewLabelWithStyle("Licensed under the ", fyne.TextAlignTrailing, fyne.TextStyle{
+							Italic: true,
+						}),
+						widget.NewLabelWithStyle("MIT License", fyne.TextAlignLeading, fyne.TextStyle{
+							Bold:   true,
+							Italic: true,
+						}),
+					)),
+					container.NewCenter(container.NewHBox(
+						widget.NewLabelWithStyle("Visit our ", fyne.TextAlignTrailing, fyne.TextStyle{
+							Bold: true,
+						}),
+						widget.NewHyperlinkWithStyle("Website", url, fyne.TextAlignLeading, fyne.TextStyle{
+							Bold: true,
+						}),
+					)),
+				),
+			)
+			infoWindow.SetContent(box)
+			infoWindow.CenterOnScreen()
+			infoWindow.RequestFocus()
+			infoWindow.Show()
 		}),
 	)
 	warningLabel := widget.NewLabel("Data deleted by Wipr is unrecoverable. Data destruction due to user error is not the responsibility of the developers.")
@@ -430,21 +469,32 @@ func Wipr() {
 
 	boxWithBg := container.NewStack(bg, ctn)
 	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
-	m := fyne.NewMenu("Wipr",
-		fyne.NewMenuItem("Show", func() {
-			if !isWiping {
-				window.Show()
+
+	wipr.Lifecycle().SetOnStarted(func() {
+		systray.Register(func() {
+			icon, err := os.ReadFile("Icon.ico")
+			if err == nil {
+				systray.SetIcon(icon)
+				systray.SetTemplateIcon(icon, icon)
 			}
-		}),
-		fyne.NewMenuItem("Quit", func() {
-			wipr.Quit()
-		}))
-	if desk, ok := wipr.(desktop.App); ok {
-		desk.SetSystemTrayMenu(m)
-		wipr.Lifecycle().SetOnStarted(func() {
+			systray.SetTitle("Wipr v" + wipr.Metadata().Version)
+			showWin := systray.AddMenuItem("Show", "Show the Wipr window")
+			quitWin := systray.AddMenuItem("Quit", "Quit Wipr")
+			go func() {
+				for {
+					select {
+					case <-showWin.ClickedCh:
+						if !isWiping {
+							fyne.Do(func() { window.Show() })
+						}
+					case <-quitWin.ClickedCh:
+						fyne.Do(func() { wipr.Quit() })
+					}
+				}
+			}()
 			systray.SetTooltip("Wipr v" + wipr.Metadata().Version)
-		})
-	}
+		}, func() {})
+	})
 
 	window.CenterOnScreen()
 	window.SetContent(content)
