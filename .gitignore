@@ -1,2 +1,3 @@
 *.exe
 fyne-cross
+bundled.go
