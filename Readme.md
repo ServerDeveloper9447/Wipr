@@ -17,7 +17,6 @@ Wipr is a desktop application for securely wiping data from drives and partition
 ### Prerequisites
 
 *   Go 1.24 or later
-*   Mingw-w64
 *   Platform specific dependencies for Fyne can be found [here](https://docs.fyne.io/started)
 
 ### Building from Source
@@ -35,19 +34,31 @@ Wipr is a desktop application for securely wiping data from drives and partition
     ```sh
     go install fyne.io/tools/cmd/fyne@latest
     ```
-4.  Build the application:
+4.  Generate go files
     ```sh
-    fyne package
+    go generate
     ```
-5.  Run the executable:
-    *   Windows: `Wipr.exe`
-    *   Linux: `./Wipr`
+5.  Build<br>
+    1. If building for Linux on Linux or Windows on Windows
+        ```sh
+        fyne package
+        ```
+    2. For cross-platform building
+        ```sh
+        go install https://github.com/fyne-io/fyne-cross
+        fyne-cross <platform> -arch=<cpu_arch> -tags <platform>
+6.  Run the executable:
+    1. If built with fyne-cross<br>
+        `./fyne-cross/bin/[platform]-[arch]/Wipr.exe`
+    2. If built without fyne-cross
+        * Windows: `.\Wipr.exe`
+        * Linux: `./wipr`
 
 ## Dependencies
 
 *   [Fyne.io](https://github.com/fyne-io/fyne): The GUI toolkit used for the user interface.
 *   [jaypipes/ghw](https://github.com/jaypipes/ghw): A hardware inspection and discovery library, used to list drives and partitions.
-*   [danieljoos/wincred](https://github.com/danieljoos/wincred): For managing verification token via Windows Credentials Manager
+*   [zalando/go-keyring](github.com/zalando/go-keyring): For managing verification token via platform keyrings
 
 ## Warning
 

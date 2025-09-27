@@ -1,6 +1,6 @@
-//go:generate fyne bundle -o bundled.go assets/Icon.png
-//go:generate fyne bundle -o bundled.go -append assets/Small_Icon.png
-//go:generate fyne bundle -o bundled.go -append assets/Icon.ico
+//go:generate fyne bundle -o bundled.go Icon.png
+//go:generate fyne bundle -o bundled.go -append Small_Icon.png
+//go:generate fyne bundle -o bundled.go -append Icon.ico
 package main
 
 import (

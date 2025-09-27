@@ -3,7 +3,7 @@
   Name = "Wipr"
   ID = "com.usbee.wipr"
   Version = "0.0.3"
-  Build = 18
+  Build = 20
 
 [LinuxAndBSD]
   GenericName = "Wipr"
