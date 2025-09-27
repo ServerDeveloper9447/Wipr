@@ -39,13 +39,11 @@ jobs:
       - name: Zip it
         run: Compress-Archive -Path Wipr.exe -DestinationPath Wipr_win-amd64.zip
 
-      - name: Upload Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Wipr_win-amd64
-          files: Wipr_win-amd64.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: Wipr_win-amd64.zip
 
   build_linux:
     permissions:
@@ -74,16 +72,11 @@ jobs:
       - name: Build
         run: fyne package -tags linux
 
-      - name: Zip it
-        run: tar -czvf Wipr_linux-amd64.tar.gz wipr
-
-      - name: Upload Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Wipr_linux-amd64
-          files: Wipr_linux-amd64.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: wipr.tar.xz
 
   release:
     needs: [build_windows, build_linux]
