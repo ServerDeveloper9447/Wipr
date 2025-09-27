@@ -70,13 +70,15 @@ jobs:
         run: go generate
 
       - name: Build
-        run: fyne package -tags linux
+        run: |
+          fyne package -tags linux
+          mv wipr.tar.xz Wipr_linux-amd64.tar.xz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Wipr_linux-amd64
-          path: wipr.tar.xz
+          path: Wipr_linux-amd64.tar.xz
 
   release:
     needs: [build_windows, build_linux]
