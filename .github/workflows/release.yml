@@ -8,44 +8,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_windows:
-    permissions:
-      contents: write
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install MinGW-w64
-        run: choco install mingw -y
-
-      - name: Set PATH for MinGW
-        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
-
-      - name: Generate bundle file
-        run: go generate
-
-      - name: Build
-        run: fyne package -tags windows
-      
-      - name: Zip it
-        run: Compress-Archive -Path Wipr.exe -DestinationPath Wipr_win-amd64.zip
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Wipr_win-amd64
-          path: Wipr_win-amd64.zip
-
-  build_linux:
+  build:
+    strategy:
+      matrix:
+        os: [windows, linux]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -53,38 +19,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: |
-          sudo apt update -y
-          sudo apt-get install libgl1-mesa-dev xorg-dev libxkbcommon-dev
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
 
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
+      - name: Pull Docker Images
+        run: docker pull fyneio/fyne-cross-images:${{ matrix.os }}
+
+      - name: Install fyne CLI and fyne-cross
+        run: |
+          go install fyne.io/tools/cmd/fyne@latest
+          go install github.com/fyne-io/fyne-cross@latest
 
       - name: Generate bundle file
         run: go generate
 
       - name: Build
-        run: |
-          fyne package -tags linux
-          mv wipr.tar.xz Wipr_linux-amd64.tar.xz
+        run: fyne-cross ${{ matrix.os }} -tags ${{ matrix.os }} -name Wipr_${{ matrix.os }}-amd64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wipr_linux-amd64
-          path: Wipr_linux-amd64.tar.xz
+          name: Wipr_${{ matrix.os }}-amd64
+          path: fyne-cross/dist/${{ matrix.os }}-amd64/*
 
   release:
-    needs: [build_windows, build_linux]
+    needs: build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-latest
 
     steps:
       - name: Download all artifacts
