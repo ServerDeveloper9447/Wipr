@@ -8,44 +8,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_windows:
-    permissions:
-      contents: write
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install MinGW-w64
-        run: choco install mingw -y
-
-      - name: Set PATH for MinGW
-        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" >> $env:GITHUB_PATH
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
-
-      - name: Generate bundle file
-        run: go generate
-
-      - name: Build
-        run: fyne package -tags windows
-      
-      - name: Zip it
-        run: Compress-Archive -Path Wipr.exe -DestinationPath Wipr_win-amd64.zip
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Wipr_win-amd64
-          path: Wipr_win-amd64.zip
-
-  build_linux:
+  build:
+    strategy:
+      matrix:
+        target: [windows, linux]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -63,22 +29,25 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Install fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
+      - name: Pull Docker Images
+        run: docker pull fyneio/fyne-cross-images:${{ matrix.target }}
+
+      - name: Install fyne CLI and fyne-cross
+        run: |
+          go install fyne.io/tools/cmd/fyne@latest
+          go install github.com/fyne-io/fyne-cross@latest
 
       - name: Generate bundle file
         run: go generate
 
       - name: Build
-        run: |
-          fyne package -tags linux
-          mv wipr.tar.xz Wipr_linux-amd64.tar.xz
+        run: fyne-cross ${{ matrix.target }} -tags ${{ matrix.target }} -name Wipr -arch=*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wipr_linux-amd64
-          path: Wipr_linux-amd64.tar.xz
+          name: Wipr_${{ matrix.target }}
+          path: fyne-cross/dist/${{ matrix.target }}-*/*
 
   release:
     needs: [build_windows, build_linux]
@@ -92,10 +61,15 @@ jobs:
         with:
           path: artifacts
 
+      - name: Flatten and rename artifacts
+        run: |
+          mkdir renamed
+          for f in $(find artifacts -type f); do base=$(basename $f); ext="${base#*.}"; archdir=$(basename $(dirname $f)); cp "$f" "renamed/Wipr_${archdir}.${ext}"; done
+      
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Wipr ${{ github.ref_name }}
-          files: artifacts/**/*
+          files: renamed/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
