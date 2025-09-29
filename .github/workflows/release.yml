@@ -60,7 +60,6 @@ jobs:
         run: |
           mkdir renamed
           for f in $(find artifacts -type f); do base=$(basename $f); ext="${base#*.}"; archdir=$(basename $(dirname $f)); cp "$f" "renamed/Wipr_${archdir}.${ext}"; done
-          ls renamed
       
       - name: Create Release
         uses: softprops/action-gh-release@v2
