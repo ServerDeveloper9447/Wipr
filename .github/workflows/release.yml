@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows, linux]
+        target: [windows, linux]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
           go-version: "1.24"
 
       - name: Pull Docker Images
-        run: docker pull fyneio/fyne-cross-images:${{ matrix.os }}
+        run: docker pull fyneio/fyne-cross-images:${{ matrix.target }}
 
       - name: Install fyne CLI and fyne-cross
         run: |
@@ -36,13 +36,13 @@ jobs:
         run: go generate
 
       - name: Build
-        run: fyne-cross ${{ matrix.os }} -tags ${{ matrix.os }} -name Wipr_${{ matrix.os }}-amd64
+        run: fyne-cross ${{ matrix.target }} -tags ${{ matrix.target }} -name Wipr -arch=*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wipr_${{ matrix.os }}-amd64
-          path: fyne-cross/dist/${{ matrix.os }}-amd64/*
+          name: Wipr_${{ matrix.target }}
+          path: fyne-cross/dist/${{ matrix.target }}-*/*
 
   release:
     needs: build
@@ -56,10 +56,15 @@ jobs:
         with:
           path: artifacts
 
+      - name: Flatten and rename artifacts
+        run: |
+          mkdir renamed
+          for f in $(find artifacts -type f); do base=$(basename $f); ext="${base#*.}"; archdir=$(basename $(dirname $f)); cp "$f" "renamed/Wipr_${archdir}.${ext}"; done
+      
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Wipr ${{ github.ref_name }}
-          files: artifacts/**/*
+          files: renamed/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
