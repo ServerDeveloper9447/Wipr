@@ -15,9 +15,15 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"fyne.io/systray"
 	"github.com/danieljoos/wincred"
 	"github.com/jaypipes/ghw"
 	"golang.org/x/sys/windows"
+)
+
+var (
+	showWinSystray *systray.MenuItem
+	quitWinSystray *systray.MenuItem
 )
 
 type Data struct {
@@ -243,4 +249,27 @@ func ElevateOnLaunch() bool {
 		return false
 	}
 	return true
+}
+
+func setupSystray(wipr fyne.App, window fyne.Window) {
+	systray.Register(func() {
+		systray.SetIcon(resourceIconIco.StaticContent)
+		systray.SetTemplateIcon(resourceIconIco.StaticContent, resourceIconIco.StaticContent)
+		systray.SetTitle("Wipr v" + wipr.Metadata().Version)
+		showWinSystray = systray.AddMenuItem("Show", "Show the Wipr window")
+		quitWinSystray = systray.AddMenuItem("Quit", "Quit Wipr")
+		go func() {
+			for {
+				select {
+				case <-showWinSystray.ClickedCh:
+					if !isWiping {
+						fyne.Do(func() { window.Show() })
+					}
+				case <-quitWinSystray.ClickedCh:
+					fyne.Do(func() { wipr.Quit() })
+				}
+			}
+		}()
+		systray.SetTooltip("Wipr v" + wipr.Metadata().Version)
+	}, func() {})
 }

@@ -21,7 +21,6 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/systray"
 	"github.com/jaypipes/ghw"
 	"github.com/zalando/go-keyring"
 )
@@ -49,8 +48,6 @@ var (
 	config         Config
 	driveMap       = make(map[string]*ghw.Disk)
 	partitionMap   = make(map[string]*ghw.Partition)
-	showWinSystray *systray.MenuItem
-	quitWinSystray *systray.MenuItem
 )
 
 func GetKey() string {
@@ -399,26 +396,7 @@ func main() {
 	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
 
 	wipr.Lifecycle().SetOnStarted(func() {
-		systray.Register(func() {
-			systray.SetIcon(resourceIconIco.StaticContent)
-			systray.SetTemplateIcon(resourceIconIco.StaticContent, resourceIconIco.StaticContent)
-			systray.SetTitle("Wipr v" + wipr.Metadata().Version)
-			showWinSystray = systray.AddMenuItem("Show", "Show the Wipr window")
-			quitWinSystray = systray.AddMenuItem("Quit", "Quit Wipr")
-			go func() {
-				for {
-					select {
-					case <-showWinSystray.ClickedCh:
-						if !isWiping {
-							fyne.Do(func() { window.Show() })
-						}
-					case <-quitWinSystray.ClickedCh:
-						fyne.Do(func() { wipr.Quit() })
-					}
-				}
-			}()
-			systray.SetTooltip("Wipr v" + wipr.Metadata().Version)
-		}, func() {})
+		setupSystray(wipr, window)
 	})
 
 	window.CenterOnScreen()
