@@ -25,7 +25,6 @@ type Config struct {
 	MinimizeOnClose bool
 	EnterpriseMode  bool
 	PassKey         string
-	AndroidMode     bool
 }
 
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
@@ -47,8 +46,11 @@ var (
 	partitionMap = make(map[string]*ghw.Partition)
 	//go:embed assets
 	assets embed.FS
-	icons  = make(map[string]*widget.Icon)
+	images  = make(map[string]*fyne.StaticResource)
+	icons = make(map[string]*theme.ThemedResource)
 )
+
+const WEBSITE_URL = "https://wipr.vercel.app"
 
 func GetKey() string {
 	secret, err := keyring.Get("Wipr_verify", "Wipr_user")
@@ -147,8 +149,12 @@ func init() {
 	for _, v := range directory {
 		file, _ := assets.ReadFile(fmt.Sprintf("assets/%s", v.Name()))
 		resource := fyne.NewStaticResource(v.Name(), file)
-		icon := widget.NewIcon(resource)
-		icons[v.Name()] = icon
+		if strings.HasSuffix(v.Name(), ".svg") {
+			themedRes := theme.NewThemedResource(resource)
+			icons[v.Name()] = themedRes
+			continue
+		}
+		images[v.Name()] = resource
 	}
 	setup_creds()
 }
@@ -195,7 +201,7 @@ func main() {
 	}
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarSpacer(),
-		widget.NewToolbarAction(icons["android.svg"].Resource, func() {
+		widget.NewToolbarAction(icons["android.svg"], func() {
 			dialog.NewConfirm("Android Mode", "Are you sure want to activate android mode?", func(b bool) {
 				if b {
 					AndroidMode(wipr, window)
@@ -253,9 +259,6 @@ func main() {
 					verifyBtn.Hide()
 					DeleteKey()
 				}
-				if config.AndroidMode {
-					AndroidMode(wipr, window)
-				}
 				modal.Hide()
 			})
 			btn.Importance = widget.HighImportance
@@ -284,7 +287,7 @@ func main() {
 			infoWindow := wipr.NewWindow("Wipr Info")
 			infoWindow.Resize(fyne.NewSize(400, 300))
 			infoWindow.SetFixedSize(true)
-			logo := canvas.NewImageFromResource(icons["Small_Icon.png"].Resource)
+			logo := canvas.NewImageFromResource(icons["Small_Icon.png"])
 			logo.FillMode = canvas.ImageFillStretch
 			logo.SetMinSize(fyne.NewSquareSize(100))
 			logo.Resize(fyne.NewSquareSize(100))
@@ -292,7 +295,7 @@ func main() {
 				Italic: true,
 			})
 			infoTxt.Wrapping = fyne.TextWrapWord
-			url, _ := url.Parse("https://wipr.vercel.app")
+			url, _ := url.Parse(WEBSITE_URL)
 			box := container.New(
 				NewCustomPaddedBoxLayout(15, 15),
 				container.NewVBox(
@@ -349,7 +352,7 @@ func main() {
 		if wipeBtn != nil {
 			wipeBtn.Disable()
 		}
-		selectOptions.SetOptions(ternary(s == "By Disk Drive", drives, partitions))
+		selectOptions.SetOptions(ternary(s == "By Disk Drive", append(drives, "All Drives"), partitions))
 	})
 	typeOptions.SetSelectedIndex(0)
 	selectOptions.SetSelectedIndex(0)
@@ -376,6 +379,16 @@ func main() {
 			}
 			wipePartitions(wipr, &window, []*ghw.Partition{partition})
 		case "By Disk Drive":
+			if selectOptions.Selected == "All Drives" {
+				for _, v := range driveMap {
+					go func() {
+						fyne.Do(func() {
+							wipePartitions(wipr, &window, v.Partitions)
+						})
+					}()
+				}
+				break
+			}
 			drive := driveMap[selectOptions.Selected]
 			if drive == nil {
 				err := errors.New("invalid drive")

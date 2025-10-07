@@ -253,8 +253,8 @@ func ElevateOnLaunch() bool {
 
 func setupSystray(wipr fyne.App, window fyne.Window) {
 	systray.Register(func() {
-		systray.SetIcon(icons["Icon.ico"].Resource.Content())
-		systray.SetTemplateIcon(icons["Icon.ico"].Resource.Content(), icons["Icon.ico"].Resource.Content())
+		systray.SetIcon(images["Icon.ico"].StaticContent)
+		systray.SetTemplateIcon(images["Icon.ico"].StaticContent, images["Icon.ico"].StaticContent)
 		systray.SetTitle("Wipr v" + wipr.Metadata().Version)
 		showWinSystray = systray.AddMenuItem("Show", "Show the Wipr window")
 		quitWinSystray = systray.AddMenuItem("Quit", "Quit Wipr")

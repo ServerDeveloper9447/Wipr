@@ -279,8 +279,8 @@ func Wipr(app fyne.App, window *fyne.Window, box *fyne.Container, data Data) (su
 
 func setupSystray(wipr fyne.App, window fyne.Window) {
 	systray.Register(func() {
-		systray.SetIcon(resourceIconIco.StaticContent)
-		systray.SetTemplateIcon(resourceIconIco.StaticContent, resourceIconIco.StaticContent)
+		systray.SetIcon(images["Icon.ico"].StaticContent)
+		systray.SetTemplateIcon(images["Icon.ico"].StaticContent, images["Icon.ico"].StaticContent)
 		systray.SetTitle("Wipr v" + wipr.Metadata().Version)
 		showWinSystray = systray.AddMenuItem("Show", "Show the Wipr window")
 		quitWinSystray = systray.AddMenuItem("Quit", "Quit Wipr")
