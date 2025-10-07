@@ -1,16 +1,12 @@
-//go:generate fyne bundle -o bundled.go Icon.png
-//go:generate fyne bundle -o bundled.go -append Small_Icon.png
-//go:generate fyne bundle -o bundled.go -append Icon.ico
 package main
 
 import (
+	"embed"
 	"errors"
 	"fmt"
 	"image/color"
 	"net/url"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -29,6 +25,7 @@ type Config struct {
 	MinimizeOnClose bool
 	EnterpriseMode  bool
 	PassKey         string
+	AndroidMode     bool
 }
 
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
@@ -44,10 +41,13 @@ const (
 )
 
 var (
-	isWiping       = false
-	config         Config
-	driveMap       = make(map[string]*ghw.Disk)
-	partitionMap   = make(map[string]*ghw.Partition)
+	isWiping     = false
+	config       Config
+	driveMap     = make(map[string]*ghw.Disk)
+	partitionMap = make(map[string]*ghw.Partition)
+	//go:embed assets
+	assets embed.FS
+	icons  = make(map[string]*widget.Icon)
 )
 
 func GetKey() string {
@@ -143,18 +143,21 @@ func shortenPath(path string) (string, error) {
 }
 
 func init() {
-	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		fmt.Println("Unsupported OS")
-		return
+	directory, _ := assets.ReadDir("assets")
+	for _, v := range directory {
+		file, _ := assets.ReadFile(fmt.Sprintf("assets/%s", v.Name()))
+		resource := fyne.NewStaticResource(v.Name(), file)
+		icon := widget.NewIcon(resource)
+		icons[v.Name()] = icon
 	}
 	setup_creds()
 }
 
 func main() {
-	isElevated := ElevateOnLaunch()
-	if !isElevated {
-		os.Exit(0)
-	}
+	// isElevated := ElevateOnLaunch()
+	// if !isElevated {
+	// 	os.Exit(0)
+	// }
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
 	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
@@ -192,6 +195,13 @@ func main() {
 	}
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarSpacer(),
+		widget.NewToolbarAction(icons["android.svg"].Resource, func() {
+			dialog.NewConfirm("Android Mode", "Are you sure want to activate android mode?", func(b bool) {
+				if b {
+					AndroidMode(wipr, window)
+				}
+			}, window).Show()
+		}),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
 			var modal *widget.PopUp
 
@@ -205,39 +215,18 @@ func main() {
 				key.Text = config.PassKey
 			}
 
-			btn := widget.NewButtonWithIcon("Connect", theme.CheckButtonCheckedIcon(), func() {
-				config.EnterpriseMode = true
-				if key.Text == "" {
-					dialog.ShowError(errors.New("please enter key"), window)
-					return
-				}
-				if len(key.Text) != 16 {
-					dialog.ShowError(errors.New("key must be of length 16"), window)
-					return
-				}
-				config.PassKey = key.Text
-				SetKey(config.PassKey)
-				verifyBtn.Show()
-				modal.Hide()
-			})
-			btn.Importance = widget.HighImportance
 			if config.EnterpriseMode {
 				key.Enable()
-				btn.Enable()
 			} else {
 				key.Disable()
-				btn.Disable()
 			}
 			checkB := widget.NewCheck("Enterprise Mode", func(b bool) {
 				if b {
 					key.Enable()
-					btn.Enable()
+					config.EnterpriseMode = true
 				} else {
 					key.Disable()
-					btn.Disable()
-					verifyBtn.Hide()
 					config.EnterpriseMode = false
-					DeleteKey()
 				}
 			})
 			checkB.Checked = config.EnterpriseMode
@@ -245,6 +234,31 @@ func main() {
 				config.MinimizeOnClose = b
 			})
 			mOC.Checked = config.MinimizeOnClose
+			btn := widget.NewButtonWithIcon("Save", theme.CheckButtonCheckedIcon(), func() {
+				if config.EnterpriseMode {
+					if key.Text == "" {
+						dialog.ShowError(errors.New("please enter a key"), window)
+						return
+					} else {
+						if len(key.Text) != 16 {
+							dialog.ShowError(errors.New("key must be of length 16"), window)
+							return
+						}
+						config.PassKey = key.Text
+						verifyBtn.Show()
+						SetKey(key.Text)
+					}
+				} else {
+					config.PassKey = ""
+					verifyBtn.Hide()
+					DeleteKey()
+				}
+				if config.AndroidMode {
+					AndroidMode(wipr, window)
+				}
+				modal.Hide()
+			})
+			btn.Importance = widget.HighImportance
 			box := container.New(NewCustomPaddedBoxLayout(5, 5),
 				container.NewPadded(
 					container.NewVBox(
@@ -270,7 +284,7 @@ func main() {
 			infoWindow := wipr.NewWindow("Wipr Info")
 			infoWindow.Resize(fyne.NewSize(400, 300))
 			infoWindow.SetFixedSize(true)
-			logo := canvas.NewImageFromResource(resourceSmallIconPng)
+			logo := canvas.NewImageFromResource(icons["Small_Icon.png"].Resource)
 			logo.FillMode = canvas.ImageFillStretch
 			logo.SetMinSize(fyne.NewSquareSize(100))
 			logo.Resize(fyne.NewSquareSize(100))
@@ -329,6 +343,7 @@ func main() {
 			wipeBtn.Enable()
 		}
 	})
+	var box *fyne.Container
 	typeOptions := widget.NewSelect([]string{"By Disk Drive", "By Partitions"}, func(s string) {
 		selectOptions.ClearSelected()
 		if wipeBtn != nil {
@@ -348,7 +363,6 @@ func main() {
 
 	bg := canvas.NewRectangle(color.Transparent)
 	bg.SetMinSize(fyne.NewSize(WIDTH-100, HEIGHT))
-	var box *fyne.Container
 	wipeBtn = widget.NewButtonWithIcon("Wipe", theme.DeleteIcon(), func() {
 		isWiping = true
 		switch typeOptions.Selected {
