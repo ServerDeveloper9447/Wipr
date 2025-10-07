@@ -32,9 +32,6 @@ jobs:
           go install fyne.io/tools/cmd/fyne@latest
           go install github.com/fyne-io/fyne-cross@latest
 
-      - name: Generate bundle file
-        run: go generate
-
       - name: Build
         run: fyne-cross ${{ matrix.target }} -tags ${{ matrix.target }} -name Wipr -arch=*
 
