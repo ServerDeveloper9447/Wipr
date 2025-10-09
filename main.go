@@ -47,8 +47,8 @@ var (
 	partitionMap = make(map[string]*ghw.Partition)
 	//go:embed assets
 	assets embed.FS
-	images  = make(map[string]*fyne.StaticResource)
-	icons = make(map[string]*theme.ThemedResource)
+	images = make(map[string]*fyne.StaticResource)
+	icons  = make(map[string]*theme.ThemedResource)
 )
 
 const WEBSITE_URL = "https://wipr.vercel.app"
@@ -285,9 +285,7 @@ func main() {
 			modal.Show()
 		}),
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
-			infoWindow := wipr.NewWindow("Wipr Info")
-			infoWindow.Resize(fyne.NewSize(400, 300))
-			infoWindow.SetFixedSize(true)
+			var modal *widget.PopUp
 			logo := canvas.NewImageFromResource(images["Small_Icon.png"])
 			logo.FillMode = canvas.ImageFillStretch
 			logo.SetMinSize(fyne.NewSquareSize(100))
@@ -323,10 +321,17 @@ func main() {
 					)),
 				),
 			)
-			infoWindow.SetContent(box)
-			infoWindow.CenterOnScreen()
-			infoWindow.RequestFocus()
-			infoWindow.Show()
+			border := container.NewBorder(widget.NewToolbar(
+				widget.NewToolbarSpacer(),
+				widget.NewToolbarAction(theme.WindowCloseIcon(), func() {
+					if modal != nil {
+						modal.Hide()
+					}
+				}),
+			), nil, nil, nil, box)
+			modal = widget.NewModalPopUp(border, window.Canvas())
+			modal.Resize(fyne.NewSize(400, 300))
+			modal.Show()
 		}),
 	)
 	warningLabel := widget.NewLabel("Data deleted by Wipr is unrecoverable. Data destruction due to user error is not the responsibility of the developers.")
@@ -426,9 +431,8 @@ func main() {
 	wipr.Lifecycle().SetOnStarted(func() {
 		setupSystray(wipr, window)
 	})
-
-	window.CenterOnScreen()
 	window.SetContent(content)
+	window.CenterOnScreen()
 	window.RequestFocus()
 	window.ShowAndRun()
 }
