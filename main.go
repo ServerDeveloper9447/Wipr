@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -160,10 +161,10 @@ func init() {
 }
 
 func main() {
-	// isElevated := ElevateOnLaunch()
-	// if !isElevated {
-	// 	os.Exit(0)
-	// }
+	isElevated := ElevateOnLaunch()
+	if !isElevated {
+		os.Exit(0)
+	}
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
 	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
