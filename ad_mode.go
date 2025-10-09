@@ -209,7 +209,7 @@ func AndroidMode(wipr fyne.App, window fyne.Window) {
 							for k := range devices {
 								deviceOptions = append(deviceOptions, k)
 							}
-							deviceSelect.Options = append(deviceSelect.Options, "All Devices")
+							deviceSelect.Options = append(deviceOptions, "All Devices")
 							if modal != nil {
 								modal.Hide()
 							}
