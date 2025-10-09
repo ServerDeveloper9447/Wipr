@@ -287,7 +287,7 @@ func main() {
 			infoWindow := wipr.NewWindow("Wipr Info")
 			infoWindow.Resize(fyne.NewSize(400, 300))
 			infoWindow.SetFixedSize(true)
-			logo := canvas.NewImageFromResource(icons["Small_Icon.png"])
+			logo := canvas.NewImageFromResource(images["Small_Icon.png"])
 			logo.FillMode = canvas.ImageFillStretch
 			logo.SetMinSize(fyne.NewSquareSize(100))
 			logo.Resize(fyne.NewSquareSize(100))
