@@ -2,7 +2,7 @@
   Icon = "assets/Small_Icon.png"
   Name = "Wipr"
   ID = "com.usbee.wipr"
-  Version = "0.1.0"
+  Version = "0.1.1"
   Build = 29
 
 [LinuxAndBSD]
