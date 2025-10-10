@@ -21,11 +21,6 @@ import (
 	"r00t2.io/gosecret"
 )
 
-type Data struct {
-	Mode string
-	Path string
-}
-
 var (
 	secretAttr = map[string]string{
 		"appname": "com.usbee.wipr",

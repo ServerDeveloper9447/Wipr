@@ -26,11 +26,6 @@ var (
 	quitWinSystray *systray.MenuItem
 )
 
-type Data struct {
-	Mode string
-	Path string
-}
-
 func setup_creds() {
 	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
 	if err != nil {
