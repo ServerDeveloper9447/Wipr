@@ -28,6 +28,11 @@ type Config struct {
 	PassKey         string
 }
 
+type Data struct {
+	Mode string
+	Path string
+}
+
 func ternary[T any](cond bool, iftrue T, iffalse T) T {
 	if cond {
 		return iftrue
