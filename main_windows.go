@@ -18,6 +18,7 @@ import (
 	"fyne.io/systray"
 	"github.com/danieljoos/wincred"
 	"github.com/jaypipes/ghw"
+	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows"
 )
 
@@ -33,6 +34,27 @@ func setup_creds() {
 	}
 	config.PassKey = string(key.CredentialBlob)
 	config.EnterpriseMode = true
+}
+
+func getVolumeName(mountPoint string) string {
+	query := fmt.Sprintf("SELECT VolumeName FROM Win32_LogicalDisk WHERE DeviceID='%s'", mountPoint)
+	var vn []struct{
+		VolumeName *string
+	}
+	wmi.Query(query, &vn)
+	return *vn[0].VolumeName
+}
+
+func List_Partitions() []string {
+	block, _ := ghw.Block()
+	paritions := []string{}
+	for _, d := range block.Disks {
+		for _, p := range d.Partitions {
+			paritions = append(paritions, fmt.Sprintf("%s %s (%s)", p.MountPoint, getVolumeName(p.MountPoint), d.Model))
+			partitionMap[fmt.Sprintf("%s %s (%s)", p.MountPoint, getVolumeName(p.MountPoint), d.Model)] = p
+		}
+	}
+	return paritions
 }
 
 func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partition) (success bool, err error) {

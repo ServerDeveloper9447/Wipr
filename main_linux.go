@@ -76,6 +76,18 @@ func deleteKey() {
 	item.Delete()
 }
 
+func List_Partitions() []string {
+	block, _ := ghw.Block()
+	paritions := []string{}
+	for _, d := range block.Disks {
+		for _, p := range d.Partitions {
+			paritions = append(paritions, fmt.Sprintf("%s %s", p.Name, d.Model))
+			partitionMap[fmt.Sprintf("%s %s", p.FilesystemLabel, d.Model)] = p
+		}
+	}
+	return paritions
+}
+
 func ElevateOnLaunch() bool {
 	if os.Geteuid() != 0 {
 		exe, _ := os.Executable()

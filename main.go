@@ -84,18 +84,6 @@ func List_Drives() []string {
 	return drives
 }
 
-func List_Partitions() []string {
-	block, _ := ghw.Block()
-	paritions := []string{}
-	for _, d := range block.Disks {
-		for _, p := range d.Partitions {
-			paritions = append(paritions, fmt.Sprintf("%s %s", p.Name, d.Model))
-			partitionMap[fmt.Sprintf("%s %s", p.Name, d.Model)] = p
-		}
-	}
-	return paritions
-}
-
 func formatBytes(b uint64) string {
 	const unit = 1024
 	if b < unit {
@@ -352,9 +340,16 @@ func main() {
 	drives := List_Drives()
 	partitions := List_Partitions()
 	var wipeBtn *widget.Button
+	warningPrimaryPartition := canvas.NewText("WARNING: This is the partition where your OS is installed.", color.RGBA{200, 10, 10, 1})
+	warningPrimaryPartition.Hide()
 	selectOptions := widget.NewSelect(drives, func(s string) {
 		if wipeBtn != nil {
 			wipeBtn.Enable()
+		}
+		if strings.HasPrefix(s, "C:") || strings.HasPrefix(s, "sda1") {
+			warningPrimaryPartition.Show()
+		} else {
+			warningPrimaryPartition.Hide()
 		}
 	})
 	var box *fyne.Container
@@ -421,6 +416,7 @@ func main() {
 		typeOptions,
 		selectOptions,
 		layout.NewSpacer(),
+		warningPrimaryPartition,
 		verifyBtn,
 		wipeBtn,
 	)
