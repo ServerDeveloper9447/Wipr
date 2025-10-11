@@ -7,6 +7,7 @@ require (
 	fyne.io/systray v1.11.0
 	github.com/danieljoos/wincred v1.2.2
 	github.com/jaypipes/ghw v0.19.1
+	github.com/yusufpapurcu/wmi v1.2.4
 	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/sys v0.36.0
 	r00t2.io/gosecret v1.1.5
@@ -43,7 +44,6 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
-	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
