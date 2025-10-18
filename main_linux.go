@@ -88,6 +88,10 @@ func List_Partitions() []string {
 	return paritions
 }
 
+func recreatePrimaryPart(disk string) {
+
+}
+
 func ElevateOnLaunch() bool {
 	if os.Geteuid() != 0 {
 		exe, _ := os.Executable()
@@ -261,27 +265,6 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 
 	progressWindow.Show()
 	return true, nil
-}
-
-func Wipr(app fyne.App, window *fyne.Window, box *fyne.Container, data Data) (success bool, err error) {
-	if data.Mode != "By Partitions" && data.Mode != "By Disk Drive" {
-		return false, errors.New("invalid mode")
-	}
-	switch data.Mode {
-	case "By Partitions":
-		partition := partitionMap[data.Path]
-		if partition == nil {
-			return false, errors.New("invalid partition")
-		}
-		return wipePartitions(app, window, []*ghw.Partition{partition})
-	case "By Disk Drive":
-		drive := driveMap[data.Path]
-		if drive == nil {
-			return false, errors.New("invalid drive")
-		}
-		return wipePartitions(app, window, drive.Partitions)
-	}
-	return false, errors.New("invalid option")
 }
 
 func setupSystray(wipr fyne.App, window fyne.Window) {

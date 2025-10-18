@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 	"unsafe"
@@ -203,25 +204,24 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 	return true, nil
 }
 
-func Wipr(app fyne.App, window *fyne.Window, box *fyne.Container, data Data) (success bool, err error) {
-	if data.Mode != "By Partitions" && data.Mode != "By Disk Drive" {
-		return false, errors.New("invalid mode")
+func recreatePrimaryPart(serialNumber string) error {
+	command := fmt.Sprintf(
+		"Get-Disk -SerialNumber '%s' | "+
+			"Clear-Disk -RemoveData -RemoveOEM -Confirm:$false | "+
+			"Initialize-Disk -PartitionStyle GPT -PassThru | "+
+			"New-Partition -UseMaximumSize -AssignDriveLetter | "+
+			"Format-Volume -FileSystem NTFS -Confirm:$false",
+		serialNumber,
+	)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", command)
+
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		return err
 	}
-	switch data.Mode {
-	case "By Partitions":
-		partition := partitionMap[data.Path]
-		if partition == nil {
-			return false, errors.New("invalid partition")
-		}
-		return wipePartitions(app, window, []*ghw.Partition{partition})
-	case "By Disk Drive":
-		drive := driveMap[data.Path]
-		if drive == nil {
-			return false, errors.New("invalid drive")
-		}
-		return wipePartitions(app, window, drive.Partitions)
-	}
-	return false, errors.New("invalid option")
+
+	return nil
 }
 
 func ElevateOnLaunch() bool {
