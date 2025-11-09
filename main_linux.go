@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"path/filepath"
 	"time"
 
@@ -88,8 +89,50 @@ func List_Partitions() []string {
 	return paritions
 }
 
-func recreatePrimaryPart(disk string) {
+func fillupDrive(app fyne.App, window *fyne.Window, disk *ghw.Disk) (success bool, err error) {
+	return true, nil
+}
 
+func recreatePrimaryPart(disk string) {
+	devicePath := "/dev/sdX"
+
+	wipeCmd := exec.Command("wipefs", "--all", devicePath)
+	output, err := wipeCmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error wiping signatures: %s\n%s\n", err, string(output))
+		return
+	}
+	fmt.Println("Signatures wiped successfully.")
+
+	fmt.Printf("Creating new GPT partition on %s...\n", devicePath)
+
+	partitionLayout := "label: gpt\n,"
+
+	sfdiskCmd := exec.Command("sfdisk", devicePath)
+	sfdiskCmd.Stdin = strings.NewReader(partitionLayout)
+
+	output, err = sfdiskCmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error running sfdisk: %s\n%s\n", err, string(output))
+		return
+	}
+	fmt.Println("Partition created successfully.")
+	fmt.Printf("sfdisk output:\n%s\n", string(output))
+
+
+	newPartitionPath := devicePath + "1"
+	fmt.Printf("Formatting %s with ext4...\n", newPartitionPath)
+	
+	mkfsCmd := exec.Command("mkfs.ext4", "-F", newPartitionPath)
+	output, err = mkfsCmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error formatting partition: %s\n%s\n", err, string(output))
+		return
+	}
+
+	fmt.Println("Partition formatted successfully.")
+	fmt.Printf("mkfs output:\n%s\n", string(output))
+	fmt.Println("\nDrive has been successfully re-partitioned and formatted.")
 }
 
 func ElevateOnLaunch() bool {
