@@ -141,6 +141,7 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 		var walkErr error
 	outer:
 		for i, p := range partitions {
+			fillupPartition(app, window, p)
 			if len(partitions) > 1 {
 				fyne.DoAndWait(func() {
 					partitionsLabel.SetText(fmt.Sprintf("Partition %d / %d", i+1, len(partitions)))
@@ -201,6 +202,14 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 	}()
 
 	progressWindow.Show()
+	return true, nil
+}
+
+func fillupPartition(app fyne.App, window *fyne.Window, p *ghw.Partition) (success bool, err error) {
+	_, err = os.OpenFile("filler", os.O_APPEND, os.ModeAppend)
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
