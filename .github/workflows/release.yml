@@ -64,4 +64,4 @@ jobs:
           name: Wipr ${{ github.ref_name }}
           files: renamed/**/*
           generate_release_notes: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WIPR_RELEASE_TOKEN }}
