@@ -1,6 +1,6 @@
 # Wipr
 <div align="center">
-    <img src="assets/Icon.png" width="50%" height="50%">
+    <img src="internal/assets/assets/Icon.png" width="50%" height="50%">
 </div>
 
 Wipr is a desktop application for securely wiping data from drives and partitions, built with Go and the [Fyne](https://fyne.io/) toolkit.

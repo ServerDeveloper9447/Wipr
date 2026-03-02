@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -32,6 +33,38 @@ func StartAdb() error {
 		return err
 	}
 	return nil
+}
+
+func waitForFastboot(serial string) error {
+	for range 30 {
+		cmd := exec.Command("fastboot", "devices")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		_ = cmd.Run()
+		if strings.Contains(out.String(), serial) {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return errors.New("timed out waiting for device in fastboot mode. please ensure bootloader is unlocked")
+}
+
+func wipeDevice(serial string) error {
+	err := exec.Command("adb", "-s", serial, "reboot", "bootloader").Run()
+	if err != nil {
+		return fmt.Errorf("failed to reboot to bootloader: %w", err)
+	}
+
+	if err := waitForFastboot(serial); err != nil {
+		return err
+	}
+
+	err = exec.Command("fastboot", "-s", serial, "-w").Run()
+	if err != nil {
+		return fmt.Errorf("failed to wipe device: %w. is the bootloader unlocked?", err)
+	}
+
+	return exec.Command("fastboot", "-s", serial, "reboot").Run()
 }
 
 type Device struct {
@@ -135,10 +168,46 @@ func AndroidMode(wipr fyne.App, window fyne.Window, width float32, height float3
 	}
 	var deviceSelect *widget.Select
 	btn := widget.NewButtonWithIcon("Wipe", theme.DeleteIcon(), func() {
-		if deviceSelect == nil {
+		if deviceSelect == nil || deviceSelect.Selected == "" {
 			return
 		}
-		_ = devices[deviceSelect.Selected]
+
+		dialog.ShowConfirm("Wipe Device", "Are you sure you want to wipe the selected device(s)? This will delete all data and cannot be undone.", func(confirm bool) {
+			if !confirm {
+				return
+			}
+			progress := dialog.NewCustomWithoutButtons("Wiping...", container.NewVBox(widget.NewLabel("Wiping device(s), please wait..."), widget.NewProgressBarInfinite()), adWindow)
+			progress.Show()
+
+			go func() {
+				defer progress.Hide()
+
+				var toWipe []string
+				if deviceSelect.Selected == "All Devices" {
+					for _, d := range devices {
+						toWipe = append(toWipe, d.ID)
+					}
+				} else {
+					if d, ok := devices[deviceSelect.Selected]; ok {
+						toWipe = append(toWipe, d.ID)
+					}
+				}
+
+				if len(toWipe) == 0 {
+					dialog.ShowError(errors.New("no device selected"), adWindow)
+					return
+				}
+
+				for _, serial := range toWipe {
+					err := wipeDevice(serial)
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("error wiping device %s: %w", serial, err), adWindow)
+						return
+					}
+				}
+				dialog.ShowInformation("Success", "Wipe completed successfully!", adWindow)
+			}()
+		}, adWindow)
 	})
 	btn.Disable()
 	btn.Importance = widget.DangerImportance
@@ -192,4 +261,3 @@ func AndroidMode(wipr fyne.App, window fyne.Window, width float32, height float3
 	adWindow.RequestFocus()
 	adWindow.Show()
 }
-
