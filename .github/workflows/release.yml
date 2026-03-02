@@ -33,7 +33,7 @@ jobs:
           go install github.com/fyne-io/fyne-cross@latest
 
       - name: Build
-        run: fyne-cross ${{ matrix.target }} -tags ${{ matrix.target }} -name Wipr -arch=*
+        run: fyne-cross ${{ matrix.target }} -tags ${{ matrix.target }} -name Wipr -arch=* -ldflags=-s -ldflags=-w ./cmd/wipr
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
