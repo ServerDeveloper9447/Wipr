@@ -60,7 +60,7 @@ The binaries are self contained. So no installation needed.
 
 *   [Fyne.io](https://github.com/fyne-io/fyne): The GUI toolkit used for the user interface.
 *   [jaypipes/ghw](https://github.com/jaypipes/ghw): A hardware inspection and discovery library, used to list drives and partitions.
-*   [zalando/go-keyring](github.com/zalando/go-keyring): For managing verification token via platform keyrings
+*   [zalando/go-keyring](https://github.com/zalando/go-keyring): For managing verification token via platform keyrings
 
 
 ## License
