@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,7 @@ type Config struct {
 	MinimizeOnClose bool
 	EnterpriseMode  bool
 	PassKey         string
+	SafeMode        bool
 }
 
 type Data struct {
@@ -45,8 +47,13 @@ const (
 )
 
 var (
-	isWiping     = false
-	config       Config
+	isWiping = false
+	config   = Config{
+		MinimizeOnClose: false,
+		EnterpriseMode:  false,
+		PassKey:         "",
+		SafeMode:        false,
+	}
 	driveMap     = make(map[string]*ghw.Disk)
 	partitionMap = make(map[string]*ghw.Partition)
 	//go:embed assets
@@ -149,38 +156,18 @@ func init() {
 		}
 		images[v.Name()] = resource
 	}
+	_, exists := os.LookupEnv("WIPRSAFEMODE")
+	if exists {
+		config.SafeMode = true
+	}
 	setup_creds()
 }
 
-func showWarning(app fyne.App, cb func()) {
-	window := app.NewWindow("Warning")
-	window.Resize(fyne.NewSize(400, 100))
-	warningLabel := widget.NewLabelWithStyle("WARNING: THIS APP IS NO LONGER IN SIMULATION MODE. IT HAS DATA DESTRUCTION PROPERTY. DO NOT RUN IT WITHOUT A VM IF YOU DONT WANT YOUR DATA DESTROYED. This warning will be removed on first stable release.", fyne.TextAlignCenter, fyne.TextStyle{
-		Bold:      true,
-		Underline: true,
-	})
-	warningLabel.Wrapping = fyne.TextWrapWord
-	box := container.NewVBox(
-		warningLabel,
-		container.NewHBox(
-			widget.NewButton("Understood.", func() {
-				window.Close()
-				cb()
-			}),
-			widget.NewButton("Quit", func() {
-				app.Quit()
-			}),
-		),
-	)
-	window.SetContent(box)
-	window.ShowAndRun()
-}
-
 func main() {
-	// isElevated := ElevateOnLaunch()
-	// if !isElevated {
-	// 	os.Exit(0)
-	// }
+	isElevated := ElevateOnLaunch()
+	if !isElevated {
+		os.Exit(0)
+	}
 	wipr := app.New()
 	window := wipr.NewWindow("Wipr")
 	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
@@ -426,7 +413,9 @@ func main() {
 				return
 			}
 			wipePartitions(wipr, &window, drive.Partitions)
-			// recreatePrimaryPart(drive.SerialNumber)
+			if err := recreatePrimaryPart(drive); err != nil {
+				dialog.ShowError(err, window)
+			}
 		default:
 			err := errors.New("invalid mode")
 			dialog.ShowError(err, window)
@@ -459,7 +448,4 @@ func main() {
 	window.SetContent(content)
 	window.CenterOnScreen()
 	window.RequestFocus()
-	showWarning(wipr, func() {
-		window.Show()
-	})
 }

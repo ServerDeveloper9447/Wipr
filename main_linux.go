@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"path/filepath"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -18,7 +16,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"fyne.io/systray"
 	"github.com/jaypipes/ghw"
-	"golang.org/x/sys/unix"
 	"r00t2.io/gosecret"
 )
 
@@ -93,14 +90,53 @@ func fillupDrive(app fyne.App, window *fyne.Window, disk *ghw.Disk) (success boo
 	return true, nil
 }
 
-func recreatePrimaryPart(disk string) {
-	devicePath := "/dev/sdX"
+func overwrite3Pass(path string) error {
+	cmd := exec.Command("shred", "-n", "3", "-z", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("shred failed on %s: %v\n%s", path, err, string(output))
+	}
+	return nil
+}
+
+func ataSecureErase(devicePath string) error {
+	checkCmd := exec.Command("hdparm", "-I", devicePath)
+	output, err := checkCmd.CombinedOutput()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(string(output), "supported") || strings.Contains(string(output), "frozen") {
+		return errors.New("ATA Secure Erase not supported or drive is frozen")
+	}
+
+	setPass := exec.Command("hdparm", "--user-master", "u", "--security-set-pass", "wipr", devicePath)
+	if output, err := setPass.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set security password: %v\n%s", err, string(output))
+	}
+
+	eraseCmd := exec.Command("hdparm", "--user-master", "u", "--security-erase", "wipr", devicePath)
+	if output, err := eraseCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to execute security erase: %v\n%s", err, string(output))
+	}
+	return nil
+}
+
+func recreatePrimaryPart(d *ghw.Disk) error {
+	devicePath := "/dev/" + d.Name
+
+	fmt.Printf("Attempting ATA Secure Erase on %s...\n", devicePath)
+	err := ataSecureErase(devicePath)
+	if err != nil {
+		fmt.Printf("ATA Secure Erase failed: %v. Falling back to 3-pass overwrite.\n", err)
+		if err := overwrite3Pass(devicePath); err != nil {
+			return err
+		}
+	}
 
 	wipeCmd := exec.Command("wipefs", "--all", devicePath)
 	output, err := wipeCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error wiping signatures: %s\n%s\n", err, string(output))
-		return
+		return err
 	}
 	fmt.Println("Signatures wiped successfully.")
 
@@ -114,25 +150,28 @@ func recreatePrimaryPart(disk string) {
 	output, err = sfdiskCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error running sfdisk: %s\n%s\n", err, string(output))
-		return
+		return err
 	}
 	fmt.Println("Partition created successfully.")
 	fmt.Printf("sfdisk output:\n%s\n", string(output))
 
-
 	newPartitionPath := devicePath + "1"
+	if strings.Contains(devicePath, "nvme") || strings.Contains(devicePath, "mmcblk") {
+		newPartitionPath = devicePath + "p1"
+	}
 	fmt.Printf("Formatting %s with ext4...\n", newPartitionPath)
-	
+
 	mkfsCmd := exec.Command("mkfs.ext4", "-F", newPartitionPath)
 	output, err = mkfsCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error formatting partition: %s\n%s\n", err, string(output))
-		return
+		return err
 	}
 
 	fmt.Println("Partition formatted successfully.")
 	fmt.Printf("mkfs output:\n%s\n", string(output))
 	fmt.Println("\nDrive has been successfully re-partitioned and formatted.")
+	return nil
 }
 
 func ElevateOnLaunch() bool {
@@ -178,37 +217,18 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 	}
 
 	progressWindow := app.NewWindow("Wiping in progress")
+	statusLabel := widget.NewLabel("Wiping partitions...")
+	prg := widget.NewProgressBarInfinite()
 
-	partitionsLabel := widget.NewLabel("")
-	sizeLabel := widget.NewLabel("")
-	textArea := widget.NewLabel("")
-	textArea.Wrapping = fyne.TextWrapBreak
-	prg := widget.NewProgressBar()
-
-	if len(partitions) <= 1 {
-		partitionsLabel.Hide()
-	}
-
-	pauseChan := make(chan bool, 1)
-	cancelChan := make(chan struct{})
-	cancelFunc := func() {
-		pauseChan <- true
-		dialog.ShowConfirm("Cancel?", "Are you sure you want to cancel?", func(confirm bool) {
-			if confirm {
-				close(cancelChan)
-			} else {
-				pauseChan <- false
-			}
-		}, progressWindow)
-	}
-	cancelButton := widget.NewButton("Cancel", cancelFunc)
-
-	progressBox := container.NewVBox(widget.NewLabel("Wiping..."), partitionsLabel, sizeLabel, prg, textArea, layout.NewSpacer(), cancelButton)
+	progressBox := container.NewVBox(
+		layout.NewSpacer(),
+		statusLabel,
+		prg,
+		layout.NewSpacer(),
+	)
 	progressWindow.SetContent(progressBox)
-	progressWindow.Resize(fyne.NewSize(400, 200))
-	progressWindow.SetFixedSize(true)
+	progressWindow.Resize(fyne.NewSize(300, 150))
 	progressWindow.CenterOnScreen()
-	progressWindow.SetCloseIntercept(cancelFunc)
 
 	go func() {
 		defer func() {
@@ -225,81 +245,22 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 			})
 		}()
 
-		var accumulatedSize uint64 = 0
-		var totalPartitionSize uint64 = 0
-		var totalUsedBytes uint64 = 0
-
-		for _, p := range partitions {
-			totalPartitionSize += p.SizeBytes
-			var stat unix.Statfs_t
-			err := unix.Statfs(p.MountPoint, &stat)
-			if err == nil {
-				totalNumberOfBytes := stat.Blocks * uint64(stat.Bsize)
-				totalNumberOfFreeBytes := stat.Bfree * uint64(stat.Bsize)
-				totalUsedBytes += (totalNumberOfBytes - totalNumberOfFreeBytes)
-			}
-		}
-
-		fyne.DoAndWait(func() {
-			sizeLabel.SetText(fmt.Sprintf("0 / %s", formatBytes(totalUsedBytes)))
-		})
-
-		var walkErr error
-	outer:
+		var wipeErr error
 		for i, p := range partitions {
-			if len(partitions) > 1 {
-				fyne.DoAndWait(func() {
-					partitionsLabel.SetText(fmt.Sprintf("Partition %d / %d", i+1, len(partitions)))
-				})
-			}
-			walkErr = filepath.Walk(p.MountPoint+"/", func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					if os.IsPermission(err) {
-						return nil
-					}
-					return err
-				}
-
-				select {
-				case <-cancelChan:
-					return errors.New("operation cancelled")
-				case <-pauseChan:
-					select {
-					case <-cancelChan:
-						return errors.New("operation cancelled")
-					case <-pauseChan:
-					}
-				default:
-				}
-
-				if !info.IsDir() {
-					time.Sleep(10 * time.Millisecond)
-					accumulatedSize += uint64(info.Size())
-					fyne.DoAndWait(func() {
-						if totalPartitionSize > 0 {
-							prg.SetValue(float64(accumulatedSize) / float64(totalPartitionSize))
-						}
-						path, _ = shortenPath(path)
-						textArea.SetText(path)
-						sizeLabel.SetText(fmt.Sprintf("%s / %s", formatBytes(accumulatedSize), formatBytes(totalUsedBytes)))
-					})
-				}
-				return nil
+			fyne.DoAndWait(func() {
+				statusLabel.SetText(fmt.Sprintf("Wiping partition %d/%d (%s)...", i+1, len(partitions), p.Name))
 			})
-
-			if walkErr != nil {
-				break outer
+			devicePath := "/dev/" + p.Name
+			if err := overwrite3Pass(devicePath); err != nil {
+				wipeErr = err
+				break
 			}
 		}
 
 		fyne.DoAndWait(func() {
-			if walkErr != nil && walkErr.Error() == "operation cancelled" {
-				dialog.ShowInformation("Cancelled", "Wipe operation was cancelled.", *window)
-			} else if walkErr != nil {
-				dialog.ShowError(walkErr, *window)
+			if wipeErr != nil {
+				dialog.ShowError(wipeErr, *window)
 			} else {
-				prg.SetValue(1.0)
-				sizeLabel.SetText(fmt.Sprintf("%s / %s", formatBytes(totalPartitionSize), formatBytes(totalPartitionSize)))
 				dialog.ShowInformation("Success", "Wipe complete!", *window)
 				app.SendNotification(fyne.NewNotification("Success", "Wipe Complete"))
 			}
