@@ -1,5 +1,5 @@
 [Details]
-  Icon = "assets/Small_Icon.png"
+  Icon = "internal/assets/assets/Small_Icon.png"
   Name = "Wipr"
   ID = "com.usbee.wipr"
   Version = "0.1.1"

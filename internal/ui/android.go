@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"bytes"
@@ -86,7 +86,7 @@ func getAdbDevices() (map[string]Device, error) {
 	return devices, nil
 }
 
-func AndroidMode(wipr fyne.App, window fyne.Window) {
+func AndroidMode(wipr fyne.App, window fyne.Window, width float32, height float32, websiteURL string) {
 	if drv, ok := wipr.Driver().(desktop.Driver); ok {
 		w := drv.CreateSplashWindow()
 		w.SetContent(container.NewVBox(
@@ -108,7 +108,7 @@ func AndroidMode(wipr fyne.App, window fyne.Window) {
 	window.Hide()
 	adWindow := wipr.NewWindow("Wipr - Android Mode")
 	adWindow.SetTitle("Wipr - Android Mode")
-	adWindow.Resize(fyne.NewSize(WIDTH-100, HEIGHT))
+	adWindow.Resize(fyne.NewSize(width-100, height))
 	adWindow.SetFixedSize(true)
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarSpacer(),
@@ -121,7 +121,7 @@ func AndroidMode(wipr fyne.App, window fyne.Window) {
 			}, adWindow)
 		}),
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
-			url, _ := url.Parse(fmt.Sprintf("%s/android", WEBSITE_URL))
+			url, _ := url.Parse(fmt.Sprintf("%s/android", websiteURL))
 			wipr.OpenURL(url)
 		}),
 	)
@@ -192,3 +192,4 @@ func AndroidMode(wipr fyne.App, window fyne.Window) {
 	adWindow.RequestFocus()
 	adWindow.Show()
 }
+

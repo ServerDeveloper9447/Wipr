@@ -1,13 +1,11 @@
 package main
 
 import (
-	"embed"
 	"errors"
 	"fmt"
 	"image/color"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -19,27 +17,14 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/jaypipes/ghw"
-	"github.com/zalando/go-keyring"
+
+	"wipr/internal/assets"
+	"wipr/internal/config"
+	"wipr/internal/platform"
+	"wipr/internal/storage"
+	"wipr/internal/ui"
+	"wipr/internal/utils"
 )
-
-type Config struct {
-	MinimizeOnClose bool
-	EnterpriseMode  bool
-	PassKey         string
-	SafeMode        bool
-}
-
-type Data struct {
-	Mode string
-	Path string
-}
-
-func ternary[T any](cond bool, iftrue T, iffalse T) T {
-	if cond {
-		return iftrue
-	}
-	return iffalse
-}
 
 const (
 	WIDTH  = 700
@@ -48,106 +33,22 @@ const (
 
 var (
 	isWiping = false
-	config   = Config{
+	cfg      = config.Config{
 		MinimizeOnClose: false,
 		EnterpriseMode:  false,
 		PassKey:         "",
 		SafeMode:        false,
 	}
-	driveMap     = make(map[string]*ghw.Disk)
-	partitionMap = make(map[string]*ghw.Partition)
-	//go:embed assets
-	assets embed.FS
 	images = make(map[string]*fyne.StaticResource)
 	icons  = make(map[string]*theme.ThemedResource)
 )
 
 const WEBSITE_URL = "https://wipr.vercel.app"
 
-func GetKey() string {
-	secret, err := keyring.Get("Wipr_verify", "Wipr_user")
-	if err != nil {
-		return secret
-	}
-	return ""
-}
-
-func SetKey(s string) {
-	keyring.Set("Wipr_verify", "Wipr_user", s)
-}
-
-func DeleteKey() {
-	keyring.Delete("Wipr_verify", "Wipr_user")
-}
-
-func List_Drives() []string {
-	block, _ := ghw.Block()
-	drives := []string{}
-	for _, d := range block.Disks {
-		driveMap[d.Model] = d
-		drives = append(drives, d.Model)
-	}
-	return drives
-}
-
-func formatBytes(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
-}
-
-func shortenPath(path string) (string, error) {
-	cleanPath := filepath.ToSlash(path)
-
-	dir, file := filepath.Split(cleanPath)
-
-	if file == "" {
-		return "", fmt.Errorf("invalid path: no file name found")
-	}
-
-	dirParts := strings.Split(strings.TrimSuffix(dir, "/"), "/")
-
-	var shortDir []string
-	if len(dirParts) > 3 {
-		shortDir = append(shortDir, dirParts[0], "...")
-
-		for i := len(dirParts) - 2; i < len(dirParts); i++ {
-			folderName := dirParts[i]
-			if len(folderName) > 10 {
-				shortDir = append(shortDir, folderName[:5]+"[...]"+folderName[len(folderName)-5:])
-			} else {
-				shortDir = append(shortDir, folderName)
-			}
-		}
-	} else {
-		shortDir = dirParts
-	}
-
-	shortenedDir := strings.Join(shortDir, "/") + "/"
-
-	ext := filepath.Ext(file)
-	name := strings.TrimSuffix(file, ext)
-	var shortFile string
-	if len(name) > 10 {
-		shortFile = name[:5] + "[...]" + name[len(name)-5:] + ext
-	} else {
-		shortFile = file
-	}
-
-	return shortenedDir + shortFile, nil
-}
-
 func init() {
-	directory, _ := assets.ReadDir("assets")
+	directory, _ := assets.FS.ReadDir("assets")
 	for _, v := range directory {
-		file, _ := assets.ReadFile(fmt.Sprintf("assets/%s", v.Name()))
+		file, _ := assets.FS.ReadFile(fmt.Sprintf("assets/%s", v.Name()))
 		resource := fyne.NewStaticResource(v.Name(), file)
 		if strings.HasSuffix(v.Name(), ".svg") {
 			themedRes := theme.NewThemedResource(resource)
@@ -158,13 +59,16 @@ func init() {
 	}
 	_, exists := os.LookupEnv("WIPRSAFEMODE")
 	if exists {
-		config.SafeMode = true
+		cfg.SafeMode = true
 	}
-	setup_creds()
+	platform.SetupCreds(func(key string) {
+		cfg.PassKey = key
+		cfg.EnterpriseMode = true
+	})
 }
 
 func main() {
-	isElevated := ElevateOnLaunch()
+	isElevated := platform.ElevateOnLaunch()
 	if !isElevated {
 		os.Exit(0)
 	}
@@ -177,12 +81,12 @@ func main() {
 	t := true
 	modalHidden = &t
 	window.SetCloseIntercept(func() {
-		if config.MinimizeOnClose {
+		if cfg.MinimizeOnClose {
 			window.Hide()
 			return
 		}
 		var modal *widget.PopUp
-		box := container.New(NewCustomPaddedBoxLayout(15, 15), container.NewPadded(container.NewVBox(
+		box := container.New(ui.NewCustomPaddedBoxLayout(15, 15), container.NewPadded(container.NewVBox(
 			widget.NewLabel("Are you sure you want to quit?"),
 			container.NewGridWithColumns(2, widget.NewButton("Yes", func() {
 				wipr.Quit()
@@ -200,7 +104,7 @@ func main() {
 	verifyBtn := widget.NewButtonWithIcon("Verify", theme.CheckButtonCheckedIcon(), func() {
 		fmt.Println("Verifying methods...")
 	})
-	if !config.EnterpriseMode {
+	if !cfg.EnterpriseMode {
 		verifyBtn.Hide()
 	}
 	toolbar := widget.NewToolbar(
@@ -208,7 +112,7 @@ func main() {
 		widget.NewToolbarAction(icons["android.svg"], func() {
 			dialog.NewConfirm("Android Mode", "Are you sure want to activate android mode?", func(b bool) {
 				if b {
-					AndroidMode(wipr, window)
+					ui.AndroidMode(wipr, window, WIDTH, HEIGHT, WEBSITE_URL)
 				}
 			}, window).Show()
 		}),
@@ -221,11 +125,11 @@ func main() {
 				s = strings.ReplaceAll(s, " ", "")
 				key.SetText(s)
 			}
-			if config.EnterpriseMode {
-				key.Text = config.PassKey
+			if cfg.EnterpriseMode {
+				key.Text = cfg.PassKey
 			}
 
-			if config.EnterpriseMode {
+			if cfg.EnterpriseMode {
 				key.Enable()
 			} else {
 				key.Disable()
@@ -233,19 +137,19 @@ func main() {
 			checkB := widget.NewCheck("Enterprise Mode", func(b bool) {
 				if b {
 					key.Enable()
-					config.EnterpriseMode = true
+					cfg.EnterpriseMode = true
 				} else {
 					key.Disable()
-					config.EnterpriseMode = false
+					cfg.EnterpriseMode = false
 				}
 			})
-			checkB.Checked = config.EnterpriseMode
+			checkB.Checked = cfg.EnterpriseMode
 			mOC := widget.NewCheck("Minimize on close", func(b bool) {
-				config.MinimizeOnClose = b
+				cfg.MinimizeOnClose = b
 			})
-			mOC.Checked = config.MinimizeOnClose
+			mOC.Checked = cfg.MinimizeOnClose
 			btn := widget.NewButtonWithIcon("Save", theme.CheckButtonCheckedIcon(), func() {
-				if config.EnterpriseMode {
+				if cfg.EnterpriseMode {
 					if key.Text == "" {
 						dialog.ShowError(errors.New("please enter a key"), window)
 						return
@@ -254,19 +158,19 @@ func main() {
 							dialog.ShowError(errors.New("key must be of length 16"), window)
 							return
 						}
-						config.PassKey = key.Text
+						cfg.PassKey = key.Text
 						verifyBtn.Show()
-						SetKey(key.Text)
+						config.SetKey(key.Text)
 					}
 				} else {
-					config.PassKey = ""
+					cfg.PassKey = ""
 					verifyBtn.Hide()
-					DeleteKey()
+					config.DeleteKey()
 				}
 				modal.Hide()
 			})
 			btn.Importance = widget.HighImportance
-			box := container.New(NewCustomPaddedBoxLayout(5, 5),
+			box := container.New(ui.NewCustomPaddedBoxLayout(5, 5),
 				container.NewPadded(
 					container.NewVBox(
 						mOC,
@@ -293,13 +197,13 @@ func main() {
 			logo.FillMode = canvas.ImageFillStretch
 			logo.SetMinSize(fyne.NewSquareSize(100))
 			logo.Resize(fyne.NewSquareSize(100))
-			infoTxt := widget.NewLabelWithStyle("Wipr is a data destruction tool made by US-BEE. \nData destroyed by this software due to user's fault is not the developers' responsibility.", fyne.TextAlignCenter, fyne.TextStyle{
+			infoTxt := widget.NewLabelWithStyle("Wipr is a data destruction tool made by US-BEE. Data destroyed by this software due to user's fault is not the developers' responsibility.", fyne.TextAlignCenter, fyne.TextStyle{
 				Italic: true,
 			})
 			infoTxt.Wrapping = fyne.TextWrapWord
 			url, _ := url.Parse(WEBSITE_URL)
 			box := container.New(
-				NewCustomPaddedBoxLayout(15, 15),
+				ui.NewCustomPaddedBoxLayout(15, 15),
 				container.NewVBox(
 					container.NewCenter(logo),
 					widget.NewLabelWithStyle("Wipr", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Monospace: true}),
@@ -347,8 +251,8 @@ func main() {
 			layout.NewSpacer(),
 			widget.NewLabel("v"+wipr.Metadata().Version),
 		))
-	drives := List_Drives()
-	partitions := List_Partitions()
+	drives := storage.List_Drives()
+	partitions := storage.List_Partitions()
 	var wipeBtn *widget.Button
 	warningPrimaryPartition := canvas.NewText("WARNING: This is the partition where your OS is installed.", color.RGBA{200, 10, 10, 1})
 	warningPrimaryPartition.Hide()
@@ -368,7 +272,7 @@ func main() {
 		if wipeBtn != nil {
 			wipeBtn.Disable()
 		}
-		selectOptions.SetOptions(ternary(s == "By Disk Drive", append(drives, "All Drives"), partitions))
+		selectOptions.SetOptions(utils.Ternary(s == "By Disk Drive", append(drives, "All Drives"), partitions))
 	})
 	typeOptions.SetSelectedIndex(0)
 	selectOptions.SetSelectedIndex(0)
@@ -386,34 +290,52 @@ func main() {
 		isWiping = true
 		switch typeOptions.Selected {
 		case "By Partitions":
-			partition := partitionMap[selectOptions.Selected]
+			partition := storage.PartitionMap[selectOptions.Selected]
 			if partition == nil {
 				err := errors.New("invalid partition")
 				dialog.ShowError(err, window)
 				fmt.Println(err)
 				return
 			}
-			wipePartitions(wipr, &window, []*ghw.Partition{partition})
+			storage.WipePartitions(wipr, &window, []*ghw.Partition{partition}, func() {
+				isWiping = true
+				platform.DisableSystray()
+			}, func() {
+				isWiping = false
+				platform.EnableSystray()
+			})
 		case "By Disk Drive":
 			if selectOptions.Selected == "All Drives" {
-				for _, v := range driveMap {
+				for _, v := range storage.DriveMap {
 					go func() {
 						fyne.Do(func() {
-							wipePartitions(wipr, &window, v.Partitions)
+							storage.WipePartitions(wipr, &window, v.Partitions, func() {
+								isWiping = true
+								platform.DisableSystray()
+							}, func() {
+								isWiping = false
+								platform.EnableSystray()
+							})
 						})
 					}()
 				}
 				break
 			}
-			drive := driveMap[selectOptions.Selected]
+			drive := storage.DriveMap[selectOptions.Selected]
 			if drive == nil {
 				err := errors.New("invalid drive")
 				dialog.ShowError(err, window)
 				fmt.Println(err)
 				return
 			}
-			wipePartitions(wipr, &window, drive.Partitions)
-			if err := recreatePrimaryPart(drive); err != nil {
+			storage.WipePartitions(wipr, &window, drive.Partitions, func() {
+				isWiping = true
+				platform.DisableSystray()
+			}, func() {
+				isWiping = false
+				platform.EnableSystray()
+			})
+			if err := storage.RecreatePrimaryPart(drive); err != nil {
 				dialog.ShowError(err, window)
 			}
 		default:
@@ -435,7 +357,7 @@ func main() {
 	)
 	wipeBtn.Importance = widget.DangerImportance
 	ctn := container.New(
-		NewCustomPaddedBoxLayout(15, 0),
+		ui.NewCustomPaddedBoxLayout(15, 0),
 		container.NewPadded(box),
 	)
 
@@ -443,9 +365,10 @@ func main() {
 	content := container.NewBorder(toolbar, btmToolbar, nil, nil, boxWithBg)
 
 	wipr.Lifecycle().SetOnStarted(func() {
-		setupSystray(wipr, window)
+		platform.SetupSystray(wipr, window, images, func() bool { return isWiping })
 	})
 	window.SetContent(content)
 	window.CenterOnScreen()
 	window.RequestFocus()
+	window.ShowAndRun()
 }

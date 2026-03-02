@@ -1,46 +1,31 @@
 //go:build windows
 
-package main
+package storage
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
-	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/systray"
-	"github.com/danieljoos/wincred"
 	"github.com/jaypipes/ghw"
 	"github.com/yusufpapurcu/wmi"
-	"golang.org/x/sys/windows"
 )
-
-var (
-	showWinSystray *systray.MenuItem
-	quitWinSystray *systray.MenuItem
-)
-
-func setup_creds() {
-	key, err := wincred.GetGenericCredential("Wipr/ServerKey")
-	if err != nil {
-		return
-	}
-	config.PassKey = string(key.CredentialBlob)
-	config.EnterpriseMode = true
-}
 
 func getVolumeName(mountPoint string) string {
 	query := fmt.Sprintf("SELECT VolumeName FROM Win32_LogicalDisk WHERE DeviceID='%s'", mountPoint)
-	var vn []struct{
+	var vn []struct {
 		VolumeName *string
 	}
 	wmi.Query(query, &vn)
+	if len(vn) == 0 || vn[0].VolumeName == nil {
+		return ""
+	}
 	return *vn[0].VolumeName
 }
 
@@ -50,21 +35,15 @@ func List_Partitions() []string {
 	for _, d := range block.Disks {
 		for _, p := range d.Partitions {
 			paritions = append(paritions, fmt.Sprintf("%s %s (%s)", p.MountPoint, getVolumeName(p.MountPoint), d.Model))
-			partitionMap[fmt.Sprintf("%s %s (%s)", p.MountPoint, getVolumeName(p.MountPoint), d.Model)] = p
+			PartitionMap[fmt.Sprintf("%s %s (%s)", p.MountPoint, getVolumeName(p.MountPoint), d.Model)] = p
 		}
 	}
 	return paritions
 }
 
-func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partition) (success bool, err error) {
-	isWiping = true
+func WipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partition, onWipeStart func(), onWipeEnd func()) (success bool, err error) {
 	(*window).Hide()
-	if quitWinSystray != nil {
-		quitWinSystray.Disable()
-	}
-	if showWinSystray != nil {
-		showWinSystray.Disable()
-	}
+	onWipeStart()
 
 	progressWindow := app.NewWindow("Wiping in progress")
 	statusLabel := widget.NewLabel("Wiping partitions...")
@@ -83,14 +62,8 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 	go func() {
 		defer func() {
 			fyne.Do(func() {
-				isWiping = false
+				onWipeEnd()
 				(*window).Show()
-				if quitWinSystray != nil {
-					quitWinSystray.Enable()
-				}
-				if showWinSystray != nil {
-					showWinSystray.Enable()
-				}
 				progressWindow.Close()
 			})
 		}()
@@ -102,7 +75,7 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 			})
 			cmd := exec.Command("cmd", "/c", fmt.Sprintf("format %s /P:3 /V:Wipr /FS:NTFS /X /Y", p.MountPoint))
 			if output, err := cmd.CombinedOutput(); err != nil {
-				wipeErr = fmt.Errorf("format failed on %s: %v\n%s", p.MountPoint, err, string(output))
+				wipeErr = fmt.Errorf("format failed on %s: %v %s", p.MountPoint, err, string(output))
 				break
 			}
 		}
@@ -121,8 +94,8 @@ func wipePartitions(app fyne.App, window *fyne.Window, partitions []*ghw.Partiti
 	return true, nil
 }
 
-func overwrite3Pass(d *ghw.Disk) error {
-	devicePath := "\\\\.\\" + d.Name
+func Overwrite3Pass(d *ghw.Disk) error {
+	devicePath := "\\." + d.Name
 	f, err := os.OpenFile(devicePath, os.O_WRONLY, 0)
 	if err != nil {
 		return err
@@ -172,21 +145,21 @@ func overwrite3Pass(d *ghw.Disk) error {
 	return nil
 }
 
-func ataSecureErase(d *ghw.Disk) error {
+func AtaSecureErase(d *ghw.Disk) error {
 	command := fmt.Sprintf("Get-Disk -SerialNumber '%s' | Clear-Disk -RemoveData -RemoveOEM -Confirm:$false", d.SerialNumber)
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", command)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("Clear-Disk failed: %v\n%s", err, string(output))
+		return fmt.Errorf("Clear-Disk failed: %v %s", err, string(output))
 	}
 	return nil
 }
 
-func recreatePrimaryPart(d *ghw.Disk) error {
-	fmt.Printf("Attempting Secure Erase on %s...\n", d.Model)
-	err := ataSecureErase(d)
+func RecreatePrimaryPart(d *ghw.Disk) error {
+	fmt.Printf("Attempting Secure Erase on %s...", d.Model)
+	err := AtaSecureErase(d)
 	if err != nil {
-		fmt.Printf("Secure Erase failed: %v. Falling back to 3-pass overwrite.\n", err)
-		if err := overwrite3Pass(d); err != nil {
+		fmt.Printf("Secure Erase failed: %v. Falling back to 3-pass overwrite.", err)
+		if err := Overwrite3Pass(d); err != nil {
 			return err
 		}
 	}
@@ -202,75 +175,8 @@ func recreatePrimaryPart(d *ghw.Disk) error {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", command)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("recreation failed: %v\n%s", err, string(output))
+		return fmt.Errorf("recreation failed: %v %s", err, string(output))
 	}
 
 	return nil
-}
-
-func ElevateOnLaunch() bool {
-	var token windows.Token
-	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	defer token.Close()
-	var elevation uint32
-	var retLen uint32
-	err = windows.GetTokenInformation(token, windows.TokenElevation, (*byte)(unsafe.Pointer(&elevation)), uint32(unsafe.Sizeof(elevation)), &retLen)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	if elevation == 0 {
-		shell32 := windows.NewLazyDLL("shell32.dll")
-		procShellExecute := shell32.NewProc("ShellExecuteW")
-		exe, _ := os.Executable()
-		ret, _, err := procShellExecute.Call(
-			0,
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("runas"))),
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(exe))),
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(""))),
-			0,
-			0,
-		)
-		if ret > 32 {
-			return false
-		}
-		fmt.Println(err)
-		user32 := windows.NewLazyDLL("user32.dll")
-		procMessageBoxW := user32.NewProc("MessageBoxW")
-		procMessageBoxW.Call(
-			uintptr(0),
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("Wipr needs admin access to launch"))),
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("Failed to launch Wipr"))),
-			uintptr(0),
-		)
-		return false
-	}
-	return true
-}
-
-func setupSystray(wipr fyne.App, window fyne.Window) {
-	systray.Register(func() {
-		systray.SetIcon(images["Icon.ico"].StaticContent)
-		systray.SetTemplateIcon(images["Icon.ico"].StaticContent, images["Icon.ico"].StaticContent)
-		systray.SetTitle("Wipr v" + wipr.Metadata().Version)
-		showWinSystray = systray.AddMenuItem("Show", "Show the Wipr window")
-		quitWinSystray = systray.AddMenuItem("Quit", "Quit Wipr")
-		go func() {
-			for {
-				select {
-				case <-showWinSystray.ClickedCh:
-					if !isWiping {
-						fyne.Do(func() { window.Show() })
-					}
-				case <-quitWinSystray.ClickedCh:
-					fyne.Do(func() { wipr.Quit() })
-				}
-			}
-		}()
-		systray.SetTooltip("Wipr v" + wipr.Metadata().Version)
-	}, func() {})
 }
